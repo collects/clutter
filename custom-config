@@ -1,0 +1,17 @@
+#
+#  This file was added by Duzy Chan <code@duzy.info> on 2011-09-30
+#
+SUPPORT_X11 := true
+SUPPORT_WIN32 :=
+SUPPORT_OSX :=
+SUPPORT_GLX := true
+SUPPORT_EGL :=
+SUPPORT_WAYLAND :=
+SUPPORT_TSLIB :=
+SUPPORT_EVDEV :=
+SUPPORT_CEX100 :=
+
+BUILD_XI2 :=
+
+HAVE_INTROSPECTION :=
+

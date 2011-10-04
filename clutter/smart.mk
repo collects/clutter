@@ -152,6 +152,28 @@ sm.this.sources += \
   wayland/clutter-input-device-wayland.c
 endif
 
+$(call sm-use-external, $(sm.top)/../cogl/cogl)
+$(call sm-use-external, $(sm.top)/../cogl/cogl-pango)
+
 sm.this.verbose := true
+
+sm.this.defines := \
+  -DCLUTTER_PREFIX=\""$(prefix)"\" \
+  -DCLUTTER_LIBDIR=\""$(libdir)"\" \
+  -DCLUTTER_DATADIR=\""$(datadir)"\" \
+  -DCLUTTER_LOCALEDIR=\""$(localedir)"\" \
+  -DCLUTTER_COMPILATION=1 \
+  -DCOGL_ENABLE_EXPERIMENTAL_API \
+  -DG_LOG_DOMAIN=\"Clutter\" \
+  -DHAVE_CONFIG_H \
+
+sm.this.includes := \
+  $(sm.this.dir)/.. \
+  $(sm.this.dir) \
+  $(sm.this.dir)/cally \
+
+sm.this.compile.flags := \
+  $(shell pkg-config --cflags atk)\
+  $(shell pkg-config --cflags json-glib-1.0)
 
 $(sm-build-this)

@@ -172,8 +172,9 @@ sm.this.includes := \
   $(sm.this.dir) \
   $(sm.this.dir)/cally \
 
-sm.this.compile.flags := \
+sm.this.compile.flags := -fPIC \
   $(shell pkg-config --cflags atk)\
   $(shell pkg-config --cflags json-glib-1.0)
 
+$(sm-generate-implib)
 $(sm-build-this)

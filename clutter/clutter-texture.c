@@ -167,7 +167,7 @@ static int texture_signals[LAST_SIGNAL] = { 0 };
 static GThreadPool *async_thread_pool = NULL;
 static guint        repaint_upload_func = 0;
 static GList       *upload_list = NULL;
-static GMutex       upload_list_mutex = G_MUTEX_INIT;
+static GStaticMutex upload_list_mutex = G_STATIC_MUTEX_INIT;
 
 static CoglMaterial *texture_template_material = NULL;
 

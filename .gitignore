@@ -95,3 +95,5 @@ TAGS
 *.rej
 .DS_Store
 .testlogs-*
+out
+smart

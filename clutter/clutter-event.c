@@ -33,6 +33,8 @@
 #include "clutter-keysyms.h"
 #include "clutter-private.h"
 
+#include <math.h>
+
 /**
  * SECTION:clutter-event
  * @short_description: User and window system events
@@ -49,7 +51,12 @@ typedef struct _ClutterEventPrivate {
   ClutterInputDevice *device;
   ClutterInputDevice *source_device;
 
+  gdouble delta_x;
+  gdouble delta_y;
+
   gpointer platform_data;
+
+  guint is_pointer_emulated : 1;
 } ClutterEventPrivate;
 
 static GHashTable *all_events = NULL;
@@ -103,6 +110,16 @@ _clutter_event_set_platform_data (ClutterEvent *event,
     return;
 
   ((ClutterEventPrivate *) event)->platform_data = data;
+}
+
+void
+_clutter_event_set_pointer_emulated (ClutterEvent *event,
+                                     gboolean      is_emulated)
+{
+  if (!is_event_allocated (event))
+    return;
+
+  ((ClutterEventPrivate *) event)->is_pointer_emulated = !!is_emulated;
 }
 
 /**
@@ -182,6 +199,12 @@ clutter_event_get_state (const ClutterEvent *event)
     case CLUTTER_BUTTON_RELEASE:
       return event->button.modifier_state;
 
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      return event->touch.modifier_state;
+
     case CLUTTER_MOTION:
       return event->motion.modifier_state;
 
@@ -226,6 +249,13 @@ clutter_event_set_state (ClutterEvent        *event,
       event->motion.modifier_state = state;
       break;
 
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      event->touch.modifier_state = state;
+      break;
+
     case CLUTTER_SCROLL:
       event->scroll.modifier_state = state;
       break;
@@ -250,11 +280,34 @@ clutter_event_get_coords (const ClutterEvent *event,
                           gfloat             *x,
                           gfloat             *y)
 {
-  gfloat event_x, event_y;
+  ClutterPoint coords;
 
   g_return_if_fail (event != NULL);
 
-  event_x = event_y = 0;
+  clutter_event_get_position (event, &coords);
+
+  if (x != NULL)
+    *x = coords.x;
+
+  if (y != NULL)
+    *y = coords.y;
+}
+
+/**
+ * clutter_event_get_position:
+ * @event: a #ClutterEvent
+ * @position: a #ClutterPoint
+ *
+ * Retrieves the event coordinates as a #ClutterPoint.
+ *
+ * Since: 1.12
+ */
+void
+clutter_event_get_position (const ClutterEvent *event,
+                            ClutterPoint       *position)
+{
+  g_return_if_fail (event != NULL);
+  g_return_if_fail (position != NULL);
 
   switch (event->type)
     {
@@ -265,36 +318,36 @@ clutter_event_get_coords (const ClutterEvent *event,
     case CLUTTER_DESTROY_NOTIFY:
     case CLUTTER_CLIENT_MESSAGE:
     case CLUTTER_DELETE:
+    case CLUTTER_EVENT_LAST:
+      clutter_point_init (position, 0.f, 0.f);
       break;
 
     case CLUTTER_ENTER:
     case CLUTTER_LEAVE:
-      event_x = event->crossing.x;
-      event_y = event->crossing.y;
+      clutter_point_init (position, event->crossing.x, event->crossing.y);
       break;
 
     case CLUTTER_BUTTON_PRESS:
     case CLUTTER_BUTTON_RELEASE:
-      event_x = event->button.x;
-      event_y = event->button.y;
+      clutter_point_init (position, event->button.x, event->button.y);
       break;
 
     case CLUTTER_MOTION:
-      event_x = event->motion.x;
-      event_y = event->motion.y;
+      clutter_point_init (position, event->motion.x, event->motion.y);
+      break;
+
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      clutter_point_init (position, event->touch.x, event->touch.y);
       break;
 
     case CLUTTER_SCROLL:
-      event_x = event->scroll.x;
-      event_y = event->scroll.y;
+      clutter_point_init (position, event->scroll.x, event->scroll.y);
       break;
     }
 
-  if (x)
-    *x = event_x;
-
-  if (y)
-    *y = event_y;
 }
 
 /**
@@ -323,6 +376,7 @@ clutter_event_set_coords (ClutterEvent *event,
     case CLUTTER_DESTROY_NOTIFY:
     case CLUTTER_CLIENT_MESSAGE:
     case CLUTTER_DELETE:
+    case CLUTTER_EVENT_LAST:
       break;
 
     case CLUTTER_ENTER:
@@ -340,6 +394,14 @@ clutter_event_set_coords (ClutterEvent *event,
     case CLUTTER_MOTION:
       event->motion.x = x;
       event->motion.y = y;
+      break;
+
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      event->touch.x = x;
+      event->touch.y = y;
       break;
 
     case CLUTTER_SCROLL:
@@ -490,7 +552,7 @@ clutter_event_get_related (const ClutterEvent *event)
 }
 
 /**
- * clutter_event_set_related
+ * clutter_event_set_related:
  * @event: a #ClutterEvent of type %CLUTTER_ENTER or %CLUTTER_LEAVE
  * @actor: (allow-none): a #ClutterActor or %NULL
  *
@@ -511,6 +573,72 @@ clutter_event_set_related (ClutterEvent *event,
     return;
 
   event->crossing.related = actor;
+}
+
+/**
+ * clutter_event_set_scroll_delta:
+ * @event: a #ClutterEvent of type %CLUTTER_SCROLL
+ * @dx: delta on the horizontal axis
+ * @dy: delta on the vertical axis
+ *
+ * Sets the precise scrolling information of @event.
+ *
+ * Since: 1.10
+ */
+void
+clutter_event_set_scroll_delta (ClutterEvent *event,
+                                gdouble       dx,
+                                gdouble       dy)
+{
+  g_return_if_fail (event != NULL);
+  g_return_if_fail (event->type == CLUTTER_SCROLL);
+
+  if (!is_event_allocated (event))
+    return;
+
+  event->scroll.direction = CLUTTER_SCROLL_SMOOTH;
+
+  ((ClutterEventPrivate *) event)->delta_x = dx;
+  ((ClutterEventPrivate *) event)->delta_y = dy;
+}
+
+/**
+ * clutter_event_get_scroll_delta:
+ * @event: a #ClutterEvent of type %CLUTTER_SCROLL
+ * @dx: (out): return location for the delta on the horizontal axis
+ * @dy: (out): return location for the delta on the vertical axis
+ *
+ * Retrieves the precise scrolling information of @event.
+ *
+ * The @event has to have a #ClutterScrollEvent.direction value
+ * of %CLUTTER_SCROLL_SMOOTH.
+ *
+ * Since: 1.10
+ */
+void
+clutter_event_get_scroll_delta (const ClutterEvent *event,
+                                gdouble            *dx,
+                                gdouble            *dy)
+{
+  gdouble delta_x, delta_y;
+
+  g_return_if_fail (event != NULL);
+  g_return_if_fail (event->type == CLUTTER_SCROLL);
+  g_return_if_fail (event->scroll.direction == CLUTTER_SCROLL_SMOOTH);
+
+  delta_x = delta_y = 0;
+
+  if (is_event_allocated (event))
+    {
+      delta_x = ((ClutterEventPrivate *) event)->delta_x;
+      delta_y = ((ClutterEventPrivate *) event)->delta_y;
+    }
+
+  if (dx != NULL)
+    *dx = delta_x;
+
+  if (dy != NULL)
+    *dy = delta_y;
 }
 
 /**
@@ -744,6 +872,32 @@ clutter_event_set_key_unicode (ClutterEvent *event,
 }
 
 /**
+ * clutter_event_get_event_sequence:
+ * @event: a #ClutterEvent of type %CLUTTER_TOUCH_BEGIN,
+ *   %CLUTTER_TOUCH_UPDATE, %CLUTTER_TOUCH_END, or
+ *   %CLUTTER_TOUCH_CANCEL
+ *
+ * Retrieves the #ClutterEventSequence of @event.
+ *
+ * Return value: (transfer none): the event sequence, or %NULL
+ *
+ * Since: 1.10
+ */
+ClutterEventSequence *
+clutter_event_get_event_sequence (const ClutterEvent *event)
+{
+  g_return_val_if_fail (event != NULL, NULL);
+
+  if (event->type == CLUTTER_TOUCH_BEGIN ||
+      event->type == CLUTTER_TOUCH_UPDATE ||
+      event->type == CLUTTER_TOUCH_END ||
+      event->type == CLUTTER_TOUCH_CANCEL)
+    return event->touch.sequence;
+
+  return NULL;
+}
+
+/**
  * clutter_event_get_device_id:
  * @event: a clutter event 
  *
@@ -821,6 +975,7 @@ clutter_event_set_device (ClutterEvent       *event,
     case CLUTTER_DESTROY_NOTIFY:
     case CLUTTER_CLIENT_MESSAGE:
     case CLUTTER_DELETE:
+    case CLUTTER_EVENT_LAST:
       break;
 
     case CLUTTER_ENTER:
@@ -839,6 +994,13 @@ clutter_event_set_device (ClutterEvent       *event,
 
     case CLUTTER_SCROLL:
       event->scroll.device = device;
+      break;
+
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      event->touch.device = device;
       break;
 
     case CLUTTER_KEY_PRESS:
@@ -885,6 +1047,7 @@ clutter_event_get_device (const ClutterEvent *event)
     case CLUTTER_DESTROY_NOTIFY:
     case CLUTTER_CLIENT_MESSAGE:
     case CLUTTER_DELETE:
+    case CLUTTER_EVENT_LAST:
       break;
 
     case CLUTTER_ENTER:
@@ -903,6 +1066,13 @@ clutter_event_get_device (const ClutterEvent *event)
 
     case CLUTTER_SCROLL:
       device = event->scroll.device;
+      break;
+
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      device = event->touch.device;
       break;
 
     case CLUTTER_KEY_PRESS:
@@ -970,6 +1140,9 @@ clutter_event_copy (const ClutterEvent *event)
 
       new_real_event->device = real_event->device;
       new_real_event->source_device = real_event->source_device;
+      new_real_event->delta_x = real_event->delta_x;
+      new_real_event->delta_y = real_event->delta_y;
+      new_real_event->is_pointer_emulated = real_event->is_pointer_emulated;
     }
 
   device = clutter_event_get_device (event);
@@ -995,6 +1168,15 @@ clutter_event_copy (const ClutterEvent *event)
       if (event->motion.axes != NULL)
         new_event->motion.axes = g_memdup (event->motion.axes,
                                            sizeof (gdouble) * n_axes);
+      break;
+
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      if (event->touch.axes != NULL)
+        new_event->touch.axes = g_memdup (event->touch.axes,
+                                          sizeof (gdouble) * n_axes);
       break;
 
     default:
@@ -1035,6 +1217,13 @@ clutter_event_free (ClutterEvent *event)
 
         case CLUTTER_SCROLL:
           g_free (event->scroll.axes);
+          break;
+
+        case CLUTTER_TOUCH_BEGIN:
+        case CLUTTER_TOUCH_UPDATE:
+        case CLUTTER_TOUCH_END:
+        case CLUTTER_TOUCH_CANCEL:
+          g_free (event->touch.axes);
           break;
 
         default:
@@ -1301,6 +1490,7 @@ clutter_event_get_axes (const ClutterEvent *event,
     case CLUTTER_LEAVE:
     case CLUTTER_KEY_PRESS:
     case CLUTTER_KEY_RELEASE:
+    case CLUTTER_EVENT_LAST:
       break;
 
     case CLUTTER_SCROLL:
@@ -1310,6 +1500,13 @@ clutter_event_get_axes (const ClutterEvent *event,
     case CLUTTER_BUTTON_PRESS:
     case CLUTTER_BUTTON_RELEASE:
       retval = event->button.axes;
+      break;
+
+    case CLUTTER_TOUCH_BEGIN:
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+    case CLUTTER_TOUCH_CANCEL:
+      retval = event->touch.axes;
       break;
 
     case CLUTTER_MOTION:
@@ -1332,4 +1529,124 @@ clutter_event_get_axes (const ClutterEvent *event,
     *n_axes = len;
 
   return retval;
+}
+
+/**
+ * clutter_event_get_distance:
+ * @source: a #ClutterEvent
+ * @target: a #ClutterEvent
+ *
+ * Retrieves the distance between two events, a @source and a @target.
+ *
+ * Return value: the distance between two #ClutterEvent
+ *
+ * Since: 1.12
+ */
+float
+clutter_event_get_distance (const ClutterEvent *source,
+                            const ClutterEvent *target)
+{
+  ClutterPoint p0, p1;
+
+  clutter_event_get_position (source, &p0);
+  clutter_event_get_position (source, &p1);
+
+  return clutter_point_distance (&p0, &p1, NULL, NULL);
+}
+
+/**
+ * clutter_event_get_angle:
+ * @source: a #ClutterEvent
+ * @target: a #ClutterEvent
+ *
+ * Retrieves the angle relative from @source to @target.
+ *
+ * The direction of the angle is from the position X axis towards
+ * the positive Y axis.
+ *
+ * Return value: the angle between two #ClutterEvent
+ *
+ * Since: 1.12
+ */
+double
+clutter_event_get_angle (const ClutterEvent *source,
+                         const ClutterEvent *target)
+{
+  ClutterPoint p0, p1;
+  float x_distance, y_distance;
+  double angle;
+
+  clutter_event_get_position (source, &p0);
+  clutter_event_get_position (target, &p1);
+
+  if (clutter_point_equals (&p0, &p1))
+    return 0;
+
+  clutter_point_distance (&p0, &p1, &x_distance, &y_distance);
+
+  angle = atan2 (x_distance, y_distance);
+
+  /* invert the angle, and shift it by 90 degrees */
+  angle = (2.0 * G_PI) - angle;
+  angle += G_PI / 2.0;
+
+  /* keep the angle within the [ 0, 360 ] interval */
+  angle = fmod (angle, 2.0 * G_PI);
+
+  return angle;
+}
+
+/**
+ * clutter_event_has_shift_modifier:
+ * @event: a #ClutterEvent
+ *
+ * Checks whether @event has the Shift modifier mask set.
+ *
+ * Return value: %TRUE if the event has the Shift modifier mask set
+ *
+ * Since: 1.12
+ */
+gboolean
+clutter_event_has_shift_modifier (const ClutterEvent *event)
+{
+  return (clutter_event_get_state (event) & CLUTTER_SHIFT_MASK) != FALSE;
+}
+
+/**
+ * clutter_event_has_control_modifier:
+ * @event: a #ClutterEvent
+ *
+ * Checks whether @event has the Control modifier mask set.
+ *
+ * Return value: %TRUE if the event has the Control modifier mask set
+ *
+ * Since: 1.12
+ */
+gboolean
+clutter_event_has_control_modifier (const ClutterEvent *event)
+{
+  return (clutter_event_get_state (event) & CLUTTER_CONTROL_MASK) != FALSE;
+}
+
+/**
+ * clutter_event_is_pointer_emulated:
+ * @event: a #ClutterEvent
+ *
+ * Checks whether a pointer @event has been generated by the windowing
+ * system. The returned value can be used to distinguish between events
+ * synthesized by the windowing system itself (as opposed by Clutter).
+ *
+ * Return value: %TRUE if the event is pointer emulated
+ *
+ * Since: 1.12
+ */
+gboolean
+clutter_event_is_pointer_emulated (const ClutterEvent *event)
+{
+  g_return_val_if_fail (event != NULL, FALSE);
+
+  if (!is_event_allocated (event))
+    return FALSE;
+
+  return ((ClutterEventPrivate *) event)->is_pointer_emulated;
 }

@@ -8,6 +8,8 @@
 #include "clutter-stage-window.h"
 #include "clutter-private.h"
 
+#define clutter_stage_window_get_type   _clutter_stage_window_get_type
+
 typedef ClutterStageWindowIface ClutterStageWindowInterface;
 
 G_DEFINE_INTERFACE (ClutterStageWindow, clutter_stage_window, G_TYPE_OBJECT);
@@ -15,6 +17,25 @@ G_DEFINE_INTERFACE (ClutterStageWindow, clutter_stage_window, G_TYPE_OBJECT);
 static void
 clutter_stage_window_default_init (ClutterStageWindowInterface *iface)
 {
+  GParamSpec *pspec;
+
+  pspec = g_param_spec_object ("backend",
+                               "Backend",
+                               "Back pointer to the Backend instance",
+                               CLUTTER_TYPE_BACKEND,
+                               G_PARAM_WRITABLE |
+                               G_PARAM_CONSTRUCT_ONLY |
+                               G_PARAM_STATIC_STRINGS);
+  g_object_interface_install_property (iface, pspec);
+
+  pspec = g_param_spec_object ("wrapper",
+                               "Wrapper",
+                               "Back pointer to the Stage actor",
+                               CLUTTER_TYPE_STAGE,
+                               G_PARAM_WRITABLE |
+                               G_PARAM_CONSTRUCT_ONLY |
+                               G_PARAM_STATIC_STRINGS);
+  g_object_interface_install_property (iface, pspec);
 }
 
 ClutterActor *
@@ -233,4 +254,18 @@ _clutter_stage_window_get_active_framebuffer (ClutterStageWindow *window)
     return iface->get_active_framebuffer (window);
   else
     return NULL;
+}
+
+gboolean
+_clutter_stage_window_can_clip_redraws (ClutterStageWindow *window)
+{
+  ClutterStageWindowIface *iface;
+
+  g_return_val_if_fail (CLUTTER_IS_STAGE_WINDOW (window), FALSE);
+
+  iface = CLUTTER_STAGE_WINDOW_GET_IFACE (window);
+  if (iface->can_clip_redraws != NULL)
+    return iface->can_clip_redraws (window);
+
+  return FALSE;
 }

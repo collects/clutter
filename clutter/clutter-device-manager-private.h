@@ -50,6 +50,25 @@ typedef struct _ClutterKeyInfo
   ClutterModifierType modifiers;
 } ClutterKeyInfo;
 
+typedef struct _ClutterScrollInfo
+{
+  guint axis_id;
+  ClutterScrollDirection direction;
+  gdouble increment;
+
+  gdouble last_value;
+  guint last_value_valid : 1;
+} ClutterScrollInfo;
+
+typedef struct _ClutterTouchInfo
+{
+  ClutterEventSequence *sequence;
+  ClutterActor *actor;
+
+  gint current_x;
+  gint current_y;
+} ClutterTouchInfo;
+
 struct _ClutterInputDevice
 {
   GObject parent_instance;
@@ -72,10 +91,13 @@ struct _ClutterInputDevice
 
   /* the actor underneath the pointer */
   ClutterActor *cursor_actor;
+  GHashTable   *inv_touch_sequence_actors;
 
   /* the actor that has a grab in place for the device */
   ClutterActor *pointer_grab_actor;
   ClutterActor *keyboard_grab_actor;
+  GHashTable   *sequence_grab_actors;
+  GHashTable   *inv_sequence_grab_actors;
 
   /* the current click count */
   gint click_count;
@@ -90,6 +112,9 @@ struct _ClutterInputDevice
   gint current_button_number;
   ClutterModifierType current_state;
 
+  /* the current touch points states */
+  GHashTable *touch_sequences_info;
+
   /* the previous state, used for click count generation */
   gint previous_x;
   gint previous_y;
@@ -102,6 +127,8 @@ struct _ClutterInputDevice
   guint n_keys;
   GArray *keys;
 
+  GArray *scroll_info;
+
   guint has_cursor : 1;
   guint is_enabled : 1;
 };
@@ -113,6 +140,9 @@ struct _ClutterInputDeviceClass
   void (* select_stage_events) (ClutterInputDevice *device,
                                 ClutterStage       *stage,
                                 gint                event_mask);
+  gboolean (* keycode_to_evdev) (ClutterInputDevice *device,
+                                 guint               hardware_keycode,
+                                 guint              *evdev_keycode);
 };
 
 /* device manager */
@@ -127,19 +157,30 @@ void            _clutter_device_manager_select_stage_events     (ClutterDeviceMa
 ClutterBackend *_clutter_device_manager_get_backend             (ClutterDeviceManager *device_manager);
 
 /* input device */
+gboolean        _clutter_input_device_has_sequence              (ClutterInputDevice   *device,
+                                                                 ClutterEventSequence *sequence);
+void            _clutter_input_device_add_event_sequence        (ClutterInputDevice   *device,
+                                                                 ClutterEvent         *event);
+void            _clutter_input_device_remove_event_sequence     (ClutterInputDevice   *device,
+                                                                 ClutterEvent         *event);
 void            _clutter_input_device_set_coords                (ClutterInputDevice   *device,
+                                                                 ClutterEventSequence *sequence,
                                                                  gint                  x,
-                                                                 gint                  y);
+                                                                 gint                  y,
+                                                                 ClutterStage         *stage);
 void            _clutter_input_device_set_state                 (ClutterInputDevice   *device,
                                                                  ClutterModifierType   state);
 void            _clutter_input_device_set_time                  (ClutterInputDevice   *device,
                                                                  guint32               time_);
 void            _clutter_input_device_set_stage                 (ClutterInputDevice   *device,
                                                                  ClutterStage         *stage);
+ClutterStage *  _clutter_input_device_get_stage                 (ClutterInputDevice   *device);
 void            _clutter_input_device_set_actor                 (ClutterInputDevice   *device,
+                                                                 ClutterEventSequence *sequence,
                                                                  ClutterActor         *actor,
                                                                  gboolean              emit_crossing);
 ClutterActor *  _clutter_input_device_update                    (ClutterInputDevice   *device,
+                                                                 ClutterEventSequence *sequence,
                                                                  gboolean              emit_crossing);
 void            _clutter_input_device_set_n_keys                (ClutterInputDevice   *device,
                                                                  guint                 n_keys);
@@ -165,6 +206,17 @@ gboolean        _clutter_input_device_translate_axis            (ClutterInputDev
                                                                  guint                 index_,
                                                                  gdouble               value,
                                                                  gdouble              *axis_value);
+
+void            _clutter_input_device_add_scroll_info           (ClutterInputDevice   *device,
+                                                                 guint                 index_,
+                                                                 ClutterScrollDirection direction,
+                                                                 gdouble               increment);
+void            _clutter_input_device_reset_scroll_info         (ClutterInputDevice   *device);
+gboolean        _clutter_input_device_get_scroll_delta          (ClutterInputDevice   *device,
+                                                                 guint                 index_,
+                                                                 gdouble               value,
+                                                                 ClutterScrollDirection *direction_p,
+                                                                 gdouble                *delta_p);
 
 G_END_DECLS
 

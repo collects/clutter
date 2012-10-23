@@ -19,9 +19,8 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library. If not, see <http://www.gnu.org/licenses/>.
- *
- *
  */
+
 /**
  * SECTION:clutter-main
  * @short_description: Various 'global' clutter functions.
@@ -82,7 +81,7 @@
  *   <example id="worker-thread-example">
  *     <title>A worker thread example</title>
  *     <programlisting>
- * <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" parse="text" href="../../../../tests/interactive/test-thread.c">
+ * <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" parse="text" href="../../../../examples/threads.c">
  *   <xi:fallback>FIXME: MISSING XINCLUDE CONTENT</xi:fallback>
  * </xi:include>
  *     </programlisting>
@@ -98,13 +97,13 @@
 #include <glib/gi18n-lib.h>
 #include <locale.h>
 
-#include "clutter-actor.h"
+#include "clutter-actor-private.h"
 #include "clutter-backend-private.h"
+#include "clutter-config.h"
 #include "clutter-debug.h"
 #include "clutter-device-manager-private.h"
-#include "clutter-event.h"
+#include "clutter-event-private.h"
 #include "clutter-feature.h"
-#include "clutter-frame-source.h"
 #include "clutter-main.h"
 #include "clutter-master-clock.h"
 #include "clutter-private.h"
@@ -113,6 +112,25 @@
 #include "clutter-stage-manager.h"
 #include "clutter-stage-private.h"
 #include "clutter-version.h" 	/* For flavour define */
+
+#ifdef CLUTTER_WINDOWING_OSX
+#include "osx/clutter-backend-osx.h"
+#endif
+#ifdef CLUTTER_WINDOWING_WIN32
+#include "win32/clutter-backend-win32.h"
+#endif
+#ifdef CLUTTER_WINDOWING_GDK
+#include "gdk/clutter-backend-gdk.h"
+#endif
+#ifdef CLUTTER_WINDOWING_X11
+#include "x11/clutter-backend-x11.h"
+#endif
+#ifdef CLUTTER_WINDOWING_EGL
+#include "egl/clutter-backend-eglnative.h"
+#endif
+#ifdef CLUTTER_WINDOWING_WAYLAND
+#include "wayland/clutter-backend-wayland.h"
+#endif
 
 #include <cogl/cogl.h>
 #include <cogl-pango/cogl-pango.h>
@@ -135,6 +153,7 @@ static gboolean clutter_fatal_warnings       = FALSE;
 static gboolean clutter_disable_mipmap_text  = FALSE;
 static gboolean clutter_use_fuzzy_picking    = FALSE;
 static gboolean clutter_enable_accessibility = TRUE;
+static gboolean clutter_sync_to_vblank       = TRUE;
 
 static guint clutter_default_fps             = 60;
 
@@ -207,6 +226,16 @@ clutter_threads_impl_lock (void)
 static void
 clutter_threads_impl_unlock (void)
 {
+  /* we need to trylock here, in case the lock hasn't been acquired; on
+   * various systems trying to release a mutex that hasn't been acquired
+   * will cause a run-time error. trylock() will either fail, in which
+   * case we can release the lock we own; or it will succeeds, in which
+   * case we need to release the lock we just acquired. so we ignore the
+   * returned value.
+   *
+   * see: https://bugs.gnome.org/679439
+   */
+  g_mutex_trylock (&clutter_threads_mutex);
   g_mutex_unlock (&clutter_threads_mutex);
 }
 
@@ -215,11 +244,17 @@ clutter_threads_init_default (void)
 {
   g_mutex_init (&clutter_threads_mutex);
 
+#ifndef CLUTTER_WINDOWING_WIN32
+  /* we don't need nor want locking functions on Windows.here
+  * as Windows GUI system assumes multithreadedness
+  * see bug: https://bugzilla.gnome.org/show_bug.cgi?id=662071
+  */
   if (clutter_threads_lock == NULL)
     clutter_threads_lock = clutter_threads_impl_lock;
 
   if (clutter_threads_unlock == NULL)
     clutter_threads_unlock = clutter_threads_impl_unlock;
+#endif /* CLUTTER_WINDOWING_WIN32 */
 }
 
 #define ENVIRONMENT_GROUP       "Environment"
@@ -275,6 +310,16 @@ clutter_config_read_from_key_file (GKeyFile *keyfile)
     g_clear_error (&key_error);
   else
     clutter_enable_accessibility = bool_value;
+
+  bool_value =
+    g_key_file_get_boolean (keyfile, ENVIRONMENT_GROUP,
+                            "SyncToVblank",
+                            &key_error);
+
+  if (key_error != NULL)
+    g_clear_error (&key_error);
+  else
+    clutter_sync_to_vblank = bool_value;
 
   int_value =
     g_key_file_get_integer (keyfile, ENVIRONMENT_GROUP,
@@ -371,6 +416,8 @@ clutter_config_read_from_file (const gchar *config_path)
   g_key_file_load_from_file (key_file, config_path, G_KEY_FILE_NONE, &error);
   if (error == NULL)
     {
+      CLUTTER_NOTE (MISC, "Reading configuration from '%s'", config_path);
+
       clutter_config_read_from_key_file (key_file);
 #ifdef CLUTTER_ENABLE_DEBUG
       clutter_debug_read_from_key_file (key_file);
@@ -423,11 +470,23 @@ clutter_config_read (void)
  * Return value: %TRUE if Clutter should show the FPS.
  *
  * Since: 0.4
+ *
+ * Deprecated: 1.10: This function does not do anything. Use the environment
+ *   variable or the configuration file to determine whether Clutter should
+ *   print out the FPS counter on the console.
  */
 gboolean
 clutter_get_show_fps (void)
 {
-  return clutter_show_fps;
+  return FALSE;
+}
+
+gboolean
+_clutter_context_get_show_fps (void)
+{
+  ClutterMainContext *context = _clutter_context_get_default ();
+
+  return context->show_fps;
 }
 
 /**
@@ -720,6 +779,9 @@ clutter_get_text_direction (void)
         g_warning ("Whoever translated default:LTR did so wrongly.");
     }
 
+  CLUTTER_NOTE (MISC, "Text direction: %s",
+                dir == CLUTTER_TEXT_DIRECTION_RTL ? "rtl" : "ltr");
+
   return dir;
 }
 
@@ -876,8 +938,6 @@ clutter_main (void)
       return;
     }
 
-  CLUTTER_MARK ();
-
   clutter_main_loop_level++;
 
 #ifdef CLUTTER_ENABLE_PROFILE
@@ -893,9 +953,9 @@ clutter_main (void)
 
   if (g_main_loop_is_running (main_loops->data))
     {
-      clutter_threads_leave ();
+      _clutter_threads_release_lock ();
       g_main_loop_run (loop);
-      clutter_threads_enter ();
+      _clutter_threads_acquire_lock ();
     }
 
   main_loops = g_slist_remove (main_loops, loop);
@@ -903,8 +963,6 @@ clutter_main (void)
   g_main_loop_unref (loop);
 
   clutter_main_loop_level--;
-
-  CLUTTER_MARK ();
 
   if (clutter_main_loop_level == 0)
     CLUTTER_TIMER_STOP (uprof_get_mainloop_context (), mainloop_timer);
@@ -979,12 +1037,12 @@ _clutter_threads_dispatch (gpointer data)
   ClutterThreadsDispatch *dispatch = data;
   gboolean ret = FALSE;
 
-  clutter_threads_enter ();
+  _clutter_threads_acquire_lock ();
 
   if (!g_source_is_destroyed (g_main_current_source ()))
     ret = dispatch->func (dispatch->data);
 
-  clutter_threads_leave ();
+  _clutter_threads_release_lock ();
 
   return ret;
 }
@@ -1220,18 +1278,37 @@ clutter_threads_add_timeout (guint       interval,
                                            NULL);
 }
 
+void
+_clutter_threads_acquire_lock (void)
+{
+  if (clutter_threads_lock != NULL)
+    (* clutter_threads_lock) ();
+}
+
+void
+_clutter_threads_release_lock (void)
+{
+  if (clutter_threads_unlock != NULL)
+    (* clutter_threads_unlock) ();
+}
+
 /**
  * clutter_threads_enter:
  *
  * Locks the Clutter thread lock.
  *
  * Since: 0.4
+ *
+ * Deprecated: 1.12: This function should not be used by application
+ *   code; marking critical sections is not portable on various
+ *   platforms. Instead of acquiring the Clutter lock, schedule UI
+ *   updates from the main loop using clutter_threads_add_idle() or
+ *   clutter_threads_add_timeout().
  */
 void
 clutter_threads_enter (void)
 {
-  if (clutter_threads_lock != NULL)
-    (* clutter_threads_lock) ();
+  _clutter_threads_acquire_lock ();
 }
 
 /**
@@ -1240,30 +1317,33 @@ clutter_threads_enter (void)
  * Unlocks the Clutter thread lock.
  *
  * Since: 0.4
+ *
+ * Deprecated: 1.12: This function should not be used by application
+ *   code; marking critical sections is not portable on various
+ *   platforms. Instead of acquiring the Clutter lock, schedule UI
+ *   updates from the main loop using clutter_threads_add_idle() or
+ *   clutter_threads_add_timeout().
  */
 void
 clutter_threads_leave (void)
 {
-  if (clutter_threads_unlock != NULL)
-    (* clutter_threads_unlock) ();
+  _clutter_threads_release_lock ();
 }
 
 
 /**
  * clutter_get_debug_enabled:
  *
- * Check if clutter has debugging turned on.
+ * Check if Clutter has debugging enabled.
  *
- * Return value: TRUE if debugging is turned on, FALSE otherwise.
+ * Return value: %FALSE
+ *
+ * Deprecated: 1.10: This function does not do anything.
  */
 gboolean
 clutter_get_debug_enabled (void)
 {
-#ifdef CLUTTER_ENABLE_DEBUG
-  return clutter_debug_flags != 0;
-#else
   return FALSE;
-#endif
 }
 
 void
@@ -1287,7 +1367,54 @@ _clutter_context_is_initialized (void)
   return ClutterCntx->is_initialized;
 }
 
-static inline ClutterMainContext *
+static ClutterBackend *
+clutter_create_backend (void)
+{
+  const char *backend = g_getenv ("CLUTTER_BACKEND");
+  ClutterBackend *retval = NULL;
+
+  if (backend != NULL)
+    backend = g_intern_string (backend);
+
+#ifdef CLUTTER_WINDOWING_OSX
+  if (backend == NULL || backend == I_(CLUTTER_WINDOWING_OSX))
+    retval = g_object_new (CLUTTER_TYPE_BACKEND_OSX, NULL);
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_WIN32
+  if (backend == NULL || backend == I_(CLUTTER_WINDOWING_WIN32))
+    retval = g_object_new (CLUTTER_TYPE_BACKEND_WIN32, NULL);
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_WAYLAND
+  if (backend == NULL || backend == I_(CLUTTER_WINDOWING_WAYLAND))
+    retval = g_object_new (CLUTTER_TYPE_BACKEND_WAYLAND, NULL);
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_EGL
+  if (backend == NULL || backend == I_(CLUTTER_WINDOWING_EGL))
+    retval = g_object_new (CLUTTER_TYPE_BACKEND_EGL_NATIVE, NULL);
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_X11
+  if (backend == NULL || backend == I_(CLUTTER_WINDOWING_X11))
+    retval = g_object_new (CLUTTER_TYPE_BACKEND_X11, NULL);
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_GDK
+  if (backend == NULL || backend == I_(CLUTTER_WINDOWING_GDK))
+    retval = g_object_new (CLUTTER_TYPE_BACKEND_GDK, NULL);
+  else
+#endif
+  if (backend == NULL)
+    g_error ("No default Clutter backend found.");
+  else
+    g_error ("Unsupported Clutter backend: '%s'", backend);
+
+  return retval;
+}
+
+static ClutterMainContext *
 clutter_context_get_default_unlocked (void)
 {
   if (G_UNLIKELY (ClutterCntx == NULL))
@@ -1296,11 +1423,10 @@ clutter_context_get_default_unlocked (void)
 
       ClutterCntx = ctx = g_new0 (ClutterMainContext, 1);
 
-      /* create the default backend */
-      ctx->backend = g_object_new (_clutter_backend_impl_get_type (), NULL);
-
       ctx->is_initialized = FALSE;
-      ctx->motion_events_per_actor = TRUE;
+
+      /* create the windowing system backend */
+      ctx->backend = clutter_create_backend ();
 
       /* create the default settings object, and store a back pointer to
        * the backend singleton
@@ -1308,11 +1434,7 @@ clutter_context_get_default_unlocked (void)
       ctx->settings = clutter_settings_get_default ();
       _clutter_settings_set_backend (ctx->settings, ctx->backend);
 
-#ifdef CLUTTER_ENABLE_DEBUG
-      ctx->timer = g_timer_new ();
-      g_timer_start (ctx->timer);
-#endif
-
+      ctx->motion_events_per_actor = TRUE;
       ctx->last_repaint_id = 1;
     }
 
@@ -1336,30 +1458,30 @@ _clutter_context_get_default (void)
 /**
  * clutter_get_timestamp:
  *
- * Returns the approximate number of microseconds passed since clutter was
+ * Returns the approximate number of microseconds passed since Clutter was
  * intialised.
  *
- * Return value: Number of microseconds since clutter_init() was called.
+ * This function shdould not be used by application code.
+ *
+ * The output of this function depends on whether Clutter was configured to
+ * enable its debugging code paths, so it's less useful than intended.
+ *
+ * Since Clutter 1.10, this function is an alias to g_get_monotonic_time()
+ * if Clutter was configured to enable the debugging code paths.
+ *
+ * Return value: Number of microseconds since clutter_init() was called, or
+ *   zero if Clutter was not configured with debugging code paths.
+ *
+ * Deprecated: 1.10: Use #GTimer or g_get_monotonic_time() for a proper
+ *   timing source
  */
 gulong
 clutter_get_timestamp (void)
 {
 #ifdef CLUTTER_ENABLE_DEBUG
-  ClutterMainContext *ctx;
-  gdouble seconds;
-
-  _clutter_context_lock ();
-
-  ctx = clutter_context_get_default_unlocked ();
-
-  /* FIXME: may need a custom timer for embedded setups */
-  seconds = g_timer_elapsed (ctx->timer, NULL);
-
-  _clutter_context_unlock ();
-
-  return (gulong)(seconds / 1.0e-6);
+  return (gulong) g_get_monotonic_time ();
 #else
-  return 0;
+  return 0L;
 #endif
 }
 
@@ -1650,6 +1772,10 @@ pre_parse_hook (GOptionContext  *context,
   if (env_string)
     clutter_use_fuzzy_picking = TRUE;
 
+  env_string = g_getenv ("CLUTTER_VBLANK");
+  if (g_strcmp0 (env_string, "none") == 0)
+    clutter_sync_to_vblank = FALSE;
+
   return _clutter_backend_pre_parse (backend, error);
 }
 
@@ -1682,10 +1808,10 @@ post_parse_hook (GOptionContext  *context,
     }
 
   clutter_context->frame_rate = clutter_default_fps;
+  clutter_context->show_fps = clutter_show_fps;
   clutter_context->options_parsed = TRUE;
 
-  /*
-   * If not asked to defer display setup, call clutter_init_real(),
+  /* If not asked to defer display setup, call clutter_init_real(),
    * which in turn calls the backend post parse hooks.
    */
   if (!clutter_context->defer_display_setup)
@@ -1799,8 +1925,8 @@ clutter_get_option_group_without_init (void)
  * @parameter_string: (allow-none): a string which is displayed in the
  *   first line of <option>--help</option> output, after
  *   <literal><replaceable>programname</replaceable> [OPTION...]</literal>
- * @entries: (allow-none): a %NULL terminated array of #GOptionEntry<!-- -->s
- *   describing the options of your program
+ * @entries: (array) (allow-none): a %NULL terminated array of
+ *   #GOptionEntry<!-- -->s describing the options of your program
  * @translation_domain: (allow-none): a translation domain to use for
  *   translating the <option>--help</option> output for the options in
  *   @entries with gettext(), or %NULL
@@ -2026,6 +2152,20 @@ _clutter_boolean_handled_accumulator (GSignalInvocationHint *ihint,
   return continue_emission;
 }
 
+gboolean
+_clutter_boolean_continue_accumulator (GSignalInvocationHint *ihint,
+                                       GValue                *return_accu,
+                                       const GValue          *handler_return,
+                                       gpointer               dummy)
+{
+  gboolean continue_emission;
+
+  continue_emission = g_value_get_boolean (handler_return);
+  g_value_set_boolean (return_accu, continue_emission);
+
+  return continue_emission;
+}
+
 static void
 event_click_count_generate (ClutterEvent *event)
 {
@@ -2128,14 +2268,9 @@ event_click_count_generate (ClutterEvent *event)
 }
 
 static inline void
-emit_event (ClutterEvent *event,
-            gboolean      is_key_event)
+emit_event_chain (ClutterEvent *event)
 {
-  static gboolean      lock = FALSE;
-
-  GPtrArray *event_tree = NULL;
-  ClutterActor *actor;
-  gint i = 0;
+  static gboolean lock = FALSE;
 
   if (event->any.source == NULL)
     {
@@ -2152,42 +2287,7 @@ emit_event (ClutterEvent *event,
 
   lock = TRUE;
 
-  event_tree = g_ptr_array_sized_new (64);
-
-  actor = event->any.source;
-
-  /* Build 'tree' of emitters for the event */
-  while (actor)
-    {
-      ClutterActor *parent;
-
-      parent = clutter_actor_get_parent (actor);
-
-      if (clutter_actor_get_reactive (actor) ||
-          parent == NULL ||         /* stage gets all events */
-          is_key_event)             /* keyboard events are always emitted */
-        {
-          g_ptr_array_add (event_tree, g_object_ref (actor));
-        }
-
-      actor = parent;
-    }
-
-  /* Capture */
-  for (i = event_tree->len - 1; i >= 0; i--)
-    if (clutter_actor_event (g_ptr_array_index (event_tree, i), event, TRUE))
-      goto done;
-
-  /* Bubble */
-  for (i = 0; i < event_tree->len; i++)
-    if (clutter_actor_event (g_ptr_array_index (event_tree, i), event, FALSE))
-      goto done;
-
-done:
-  for (i = 0; i < event_tree->len; i++)
-    g_object_unref (g_ptr_array_index (event_tree, i));
-
-  g_ptr_array_free (event_tree, TRUE);
+  _clutter_actor_handle_event (event->any.source, event);
 
   lock = FALSE;
 }
@@ -2207,7 +2307,7 @@ emit_pointer_event (ClutterEvent       *event,
       (device == NULL || device->pointer_grab_actor == NULL))
     {
       /* no grab, time to capture and bubble */
-      emit_event (event, FALSE);
+      emit_event_chain (event);
     }
   else
     {
@@ -2225,6 +2325,30 @@ emit_pointer_event (ClutterEvent       *event,
 }
 
 static inline void
+emit_touch_event (ClutterEvent       *event,
+                  ClutterInputDevice *device)
+{
+  ClutterActor *grab_actor = NULL;
+
+  if (device->sequence_grab_actors != NULL)
+    {
+      grab_actor = g_hash_table_lookup (device->sequence_grab_actors,
+                                        event->touch.sequence);
+    }
+
+  if (grab_actor != NULL)
+    {
+      /* per-device sequence grab */
+      clutter_actor_event (grab_actor, event, FALSE);
+    }
+  else
+    {
+      /* no grab, time to capture and bubble */
+      emit_event_chain (event);
+    }
+}
+
+static inline void
 emit_keyboard_event (ClutterEvent       *event,
                      ClutterInputDevice *device)
 {
@@ -2233,16 +2357,19 @@ emit_keyboard_event (ClutterEvent       *event,
   if (context->keyboard_grab_actor == NULL &&
       (device == NULL || device->keyboard_grab_actor == NULL))
     {
-      emit_event (event, FALSE);
+      /* no grab, time to capture and bubble */
+      emit_event_chain (event);
     }
   else
     {
       if (context->keyboard_grab_actor != NULL)
         {
+          /* global key grab */
           clutter_actor_event (context->keyboard_grab_actor, event, FALSE);
         }
       else if (device != NULL && device->keyboard_grab_actor != NULL)
         {
+          /* per-device key grab */
           clutter_actor_event (context->keyboard_grab_actor, event, FALSE);
         }
     }
@@ -2264,7 +2391,7 @@ is_off_stage (ClutterActor *stage,
 }
 
 /**
- * clutter_do_event
+ * clutter_do_event:
  * @event: a #ClutterEvent.
  *
  * Processes an event.
@@ -2306,9 +2433,7 @@ _clutter_process_event_details (ClutterActor        *stage,
                                 ClutterMainContext  *context,
                                 ClutterEvent        *event)
 {
-  ClutterInputDevice *device = NULL;
-
-  device = clutter_event_get_device (event);
+  ClutterInputDevice *device = clutter_event_get_device (event);
 
   switch (event->type)
     {
@@ -2349,7 +2474,7 @@ _clutter_process_event_details (ClutterActor        *stage,
 
             emit_pointer_event (event, device);
 
-            actor = _clutter_input_device_update (device, FALSE);
+            actor = _clutter_input_device_update (device, NULL, FALSE);
             if (actor != stage)
               {
                 ClutterEvent *crossing;
@@ -2483,7 +2608,7 @@ _clutter_process_event_details (ClutterActor        *stage,
                * get the actor underneath
                */
               if (device != NULL)
-                actor = _clutter_input_device_update (device, TRUE);
+                actor = _clutter_input_device_update (device, NULL, TRUE);
               else
                 {
                   CLUTTER_NOTE (EVENT, "No device found: picking");
@@ -2521,6 +2646,112 @@ _clutter_process_event_details (ClutterActor        *stage,
           break;
         }
 
+      case CLUTTER_TOUCH_UPDATE:
+        /* only the stage gets motion events if they are enabled */
+        if (!clutter_stage_get_motion_events_enabled (CLUTTER_STAGE (stage)) &&
+            event->any.source == NULL)
+          {
+            ClutterActor *grab_actor = NULL;
+
+            /* Only stage gets motion events */
+            event->any.source = stage;
+
+            /* global grabs */
+            if (device->sequence_grab_actors != NULL)
+              {
+                grab_actor = g_hash_table_lookup (device->sequence_grab_actors,
+                                                  event->touch.sequence);
+              }
+
+            if (grab_actor != NULL)
+              {
+                clutter_actor_event (grab_actor, event, FALSE);
+                break;
+              }
+
+            /* Trigger handlers on stage in both capture .. */
+            if (!clutter_actor_event (stage, event, TRUE))
+              {
+                /* and bubbling phase */
+                clutter_actor_event (stage, event, FALSE);
+              }
+            break;
+          }
+
+      /* fallthrough from motion */
+      case CLUTTER_TOUCH_BEGIN:
+      case CLUTTER_TOUCH_CANCEL:
+      case CLUTTER_TOUCH_END:
+        {
+          ClutterActor *actor;
+          ClutterEventSequence *sequence;
+          gfloat x, y;
+
+          sequence =
+            clutter_event_get_event_sequence (event);
+
+          if (event->type == CLUTTER_TOUCH_BEGIN)
+            _clutter_input_device_add_event_sequence (device, event);
+
+          clutter_event_get_coords (event, &x, &y);
+
+          /* Only do a pick to find the source if source is not already set
+           * (as it could be in a synthetic event)
+           */
+          if (event->any.source == NULL)
+            {
+              /* same as the mouse events above, emulate the X11 implicit
+               * soft grab */
+              if (is_off_stage (stage, x, y))
+                {
+                  CLUTTER_NOTE (EVENT,
+                                "Touch %s off stage received at %.2f, %.2f",
+                                event->type == CLUTTER_TOUCH_UPDATE ? "Touch update" :
+                                event->type == CLUTTER_TOUCH_END ? "Touch end" :
+                                event->type == CLUTTER_TOUCH_CANCEL ? "Touch cancel" :
+                                "?", x, y);
+
+                  event->button.source = stage;
+
+                  emit_touch_event (event, device);
+
+                  if (event->type == CLUTTER_TOUCH_END)
+                    _clutter_input_device_remove_event_sequence (device, event);
+
+                  break;
+                }
+
+              if (device != NULL)
+                actor = _clutter_input_device_update (device, sequence, TRUE);
+              else
+                actor = _clutter_stage_do_pick (CLUTTER_STAGE (stage),
+                                                x, y,
+                                                CLUTTER_PICK_REACTIVE);
+
+              if (actor == NULL)
+                break;
+
+              event->any.source = actor;
+            }
+          else
+            {
+              /* use the source already set in the synthetic event */
+              actor = event->any.source;
+            }
+
+          CLUTTER_NOTE (EVENT,
+                        "Reactive event received at %.2f, %.2f - actor: %p",
+                        x, y,
+                        actor);
+
+          emit_touch_event (event, device);
+
+          if (event->type == CLUTTER_TOUCH_END)
+            _clutter_input_device_remove_event_sequence (device, event);
+
+          break;
+        }
+
       case CLUTTER_STAGE_STATE:
         /* fullscreen / focus - forward to stage */
         event->any.source = stage;
@@ -2528,6 +2759,9 @@ _clutter_process_event_details (ClutterActor        *stage,
         break;
 
       case CLUTTER_CLIENT_MESSAGE:
+        break;
+
+      case CLUTTER_EVENT_LAST:
         break;
     }
 }
@@ -2549,14 +2783,20 @@ _clutter_process_event (ClutterEvent *event)
 
   stage = CLUTTER_ACTOR (event->any.stage);
   if (stage == NULL)
-    return;
+    {
+      CLUTTER_NOTE (EVENT, "Discarding event withou a stage set");
+      return;
+    }
 
-  CLUTTER_TIMESTAMP (EVENT, "Event received");
-
+  /* keep a pointer to the event and time, so that we don't need to
+   * add an event parameter to all signals that can be emitted within
+   * an event chain
+   */
   context->last_event_time = clutter_event_get_time (event);
-
   context->current_event = event;
+
   _clutter_process_event_details (stage, context, event);
+
   context->current_event = NULL;
 }
 
@@ -2628,18 +2868,13 @@ clutter_get_default_frame_rate (void)
  * is possible, this value is ignored.
  *
  * Since: 0.6
+ *
+ * Deprecated: 1.10: This function does not do anything any more.
  */
 void
 clutter_set_default_frame_rate (guint frames_per_sec)
 {
-  ClutterMainContext *context;
-
-  context = _clutter_context_get_default ();
-
-  if (context->frame_rate != frames_per_sec)
-    context->frame_rate = frames_per_sec;
 }
-
 
 static void
 on_grab_actor_destroy (ClutterActor       *actor,
@@ -2887,6 +3122,9 @@ clutter_grab_pointer_for_device (ClutterActor *actor,
     }
 
   manager = clutter_device_manager_get_default ();
+  if (manager == NULL)
+    return;
+
   dev = clutter_device_manager_get_device (manager, id_);
   if (dev == NULL)
     return;
@@ -2931,6 +3169,9 @@ clutter_ungrab_pointer_for_device (gint id_)
   ClutterInputDevice *device;
 
   manager = clutter_device_manager_get_default ();
+  if (manager == NULL)
+    return;
+
   device = clutter_device_manager_get_device (manager, id_);
   if (device != NULL)
     clutter_input_device_ungrab (device);
@@ -3199,6 +3440,8 @@ clutter_get_input_device_for_id (gint id_)
   ClutterDeviceManager *manager;
 
   manager = clutter_device_manager_get_default ();
+  if (manager == NULL)
+    return NULL;
 
   return clutter_device_manager_get_device (manager, id_);
 }
@@ -3224,6 +3467,7 @@ clutter_get_font_map (void)
 typedef struct _ClutterRepaintFunction
 {
   guint id;
+  ClutterRepaintFlags flags;
   GSourceFunc func;
   gpointer data;
   GDestroyNotify notify;
@@ -3282,20 +3526,31 @@ clutter_threads_remove_repaint_func (guint handle_id)
  * @notify: function to be called when removing the repaint
  *    function, or %NULL
  *
- * Adds a function to be called whenever Clutter is repainting a Stage.
+ * Adds a function to be called whenever Clutter is processing a new
+ * frame.
+ *
  * If the function returns %FALSE it is automatically removed from the
  * list of repaint functions and will not be called again.
  *
  * This function is guaranteed to be called from within the same thread
- * that called clutter_main(), and while the Clutter lock is being held.
+ * that called clutter_main(), and while the Clutter lock is being held;
+ * the function will be called within the main loop, so it is imperative
+ * that it does not block, otherwise the frame time budget may be lost.
  *
  * A repaint function is useful to ensure that an update of the scenegraph
  * is performed before the scenegraph is repainted; for instance, uploading
- * a frame from a video into a #ClutterTexture.
+ * a frame from a video into a #ClutterTexture. By default, a repaint
+ * function added using this function will be invoked prior to the frame
+ * being processed.
+ *
+ * Adding a repaint function does not automatically ensure that a new
+ * frame will be queued.
  *
  * When the repaint function is removed (either because it returned %FALSE
  * or because clutter_threads_remove_repaint_func() has been called) the
  * @notify function will be called, if any is set.
+ *
+ * See also: clutter_threads_add_repaint_func_full()
  *
  * Return value: the ID (greater than 0) of the repaint function. You
  *   can use the returned integer to remove the repaint function by
@@ -3307,6 +3562,55 @@ guint
 clutter_threads_add_repaint_func (GSourceFunc    func,
                                   gpointer       data,
                                   GDestroyNotify notify)
+{
+  return clutter_threads_add_repaint_func_full (CLUTTER_REPAINT_FLAGS_PRE_PAINT,
+                                                func,
+                                                data, notify);
+}
+
+/**
+ * clutter_threads_add_repaint_func_full:
+ * @flags: flags for the repaint function
+ * @func: the function to be called within the paint cycle
+ * @data: data to be passed to the function, or %NULL
+ * @notify: function to be called when removing the repaint
+ *    function, or %NULL
+ *
+ * Adds a function to be called whenever Clutter is processing a new
+ * frame.
+ *
+ * If the function returns %FALSE it is automatically removed from the
+ * list of repaint functions and will not be called again.
+ *
+ * This function is guaranteed to be called from within the same thread
+ * that called clutter_main(), and while the Clutter lock is being held;
+ * the function will be called within the main loop, so it is imperative
+ * that it does not block, otherwise the frame time budget may be lost.
+ *
+ * A repaint function is useful to ensure that an update of the scenegraph
+ * is performed before the scenegraph is repainted; for instance, uploading
+ * a frame from a video into a #ClutterTexture. The @flags passed to this
+ * function will determine the section of the frame processing that will
+ * result in @func being called.
+ *
+ * Adding a repaint function does not automatically ensure that a new
+ * frame will be queued.
+ *
+ * When the repaint function is removed (either because it returned %FALSE
+ * or because clutter_threads_remove_repaint_func() has been called) the
+ * @notify function will be called, if any is set.
+ *
+ * Return value: the ID (greater than 0) of the repaint function. You
+ *   can use the returned integer to remove the repaint function by
+ *   calling clutter_threads_remove_repaint_func().
+ *
+ * Since: 1.10
+ */
+guint
+clutter_threads_add_repaint_func_full (ClutterRepaintFlags flags,
+                                       GSourceFunc         func,
+                                       gpointer            data,
+                                       GDestroyNotify      notify)
 {
   ClutterMainContext *context;
   ClutterRepaintFunction *repaint_func;
@@ -3320,6 +3624,9 @@ clutter_threads_add_repaint_func (GSourceFunc    func,
   repaint_func = g_slice_new (ClutterRepaintFunction);
 
   repaint_func->id = context->last_repaint_id++;
+
+  /* mask out QUEUE_REDRAW_ON_ADD, since we're going to consume it */
+  repaint_func->flags = flags & ~CLUTTER_REPAINT_FLAGS_QUEUE_REDRAW_ON_ADD;
   repaint_func->func = func;
   repaint_func->data = data;
   repaint_func->notify = notify;
@@ -3329,20 +3636,27 @@ clutter_threads_add_repaint_func (GSourceFunc    func,
 
   _clutter_context_unlock ();
 
+  if ((flags & CLUTTER_REPAINT_FLAGS_QUEUE_REDRAW_ON_ADD) != 0)
+    {
+      ClutterMasterClock *master_clock = _clutter_master_clock_get_default ();
+
+      _clutter_master_clock_ensure_next_iteration (master_clock);
+    }
+
   return repaint_func->id;
 }
 
 /*
  * _clutter_run_repaint_functions:
+ * @flags: only run the repaint functions matching the passed flags
  *
  * Executes the repaint functions added using the
  * clutter_threads_add_repaint_func() function.
  *
- * Must be called before calling _clutter_stage_do_paint() and
- * with the Clutter thread lock held.
+ * Must be called with the Clutter thread lock held.
  */
 void
-_clutter_run_repaint_functions (void)
+_clutter_run_repaint_functions (ClutterRepaintFlags flags)
 {
   ClutterMainContext *context = _clutter_context_get_default ();
   ClutterRepaintFunction *repaint_func;
@@ -3369,7 +3683,10 @@ _clutter_run_repaint_functions (void)
 
       g_list_free (l);
 
-      res = repaint_func->func (repaint_func->data);
+      if ((repaint_func->flags & flags) != 0)
+        res = repaint_func->func (repaint_func->data);
+      else
+        res = TRUE;
 
       if (res)
         reinvoke_list = g_list_prepend (reinvoke_list, repaint_func);
@@ -3544,4 +3861,176 @@ _clutter_context_get_motion_events_enabled (void)
   ClutterMainContext *context = _clutter_context_get_default ();
 
   return context->motion_events_per_actor;
+}
+
+/**
+ * clutter_check_windowing_backend:
+ * @backend_type: the name of the backend to check
+ *
+ * Checks the run-time name of the Clutter windowing system backend, using
+ * the symbolic macros like %CLUTTER_WINDOWING_WIN32 or
+ * %CLUTTER_WINDOWING_X11.
+ *
+ * This function should be used in conjuction with the compile-time macros
+ * inside applications and libraries that are using the platform-specific
+ * windowing system API, to ensure that they are running on the correct
+ * windowing system; for instance:
+ *
+ * |[
+ * &num;ifdef CLUTTER_WINDOWING_X11
+ *   if (clutter_check_windowing_backend (CLUTTER_WINDOWING_X11))
+ *     {
+ *       /&ast; it is safe to use the clutter_x11_* API &ast;/
+ *     }
+ *   else
+ * &num;endif
+ * &num;ifdef CLUTTER_WINDOWING_WIN32
+ *   if (clutter_check_windowing_backend (CLUTTER_WINDOWING_WIN32))
+ *     {
+ *       /&ast; it is safe to use the clutter_win32_* API &ast;/
+ *     }
+ *   else
+ * &num;endif
+ *     g_error ("Unknown Clutter backend.");
+ * ]|
+ *
+ * Return value: %TRUE if the current Clutter windowing system backend is
+ *   the one checked, and %FALSE otherwise
+ *
+ * Since: 1.10
+ */
+gboolean
+clutter_check_windowing_backend (const char *backend_type)
+{
+  ClutterMainContext *context = _clutter_context_get_default ();
+
+  g_return_val_if_fail (backend_type != NULL, FALSE);
+
+  backend_type = g_intern_string (backend_type);
+
+#ifdef CLUTTER_WINDOWING_OSX
+  if (backend_type == I_(CLUTTER_WINDOWING_OSX) &&
+      CLUTTER_IS_BACKEND_OSX (context->backend))
+    return TRUE;
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_WIN32
+  if (backend_type == I_(CLUTTER_WINDOWING_WIN32) &&
+      CLUTTER_IS_BACKEND_WIN32 (context->backend))
+    return TRUE;
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_WAYLAND
+  if (backend_type == I_(CLUTTER_WINDOWING_WAYLAND) &&
+      CLUTTER_IS_BACKEND_WAYLAND (context->backend))
+    return TRUE;
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_EGL
+  if (backend_type == I_(CLUTTER_WINDOWING_EGL) &&
+      CLUTTER_IS_BACKEND_EGL_NATIVE (context->backend))
+    return TRUE;
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_GDK
+  if (backend_type == I_(CLUTTER_WINDOWING_GDK) &&
+      CLUTTER_IS_BACKEND_GDK (context->backend))
+    return TRUE;
+  else
+#endif
+#ifdef CLUTTER_WINDOWING_X11
+  if (backend_type == I_(CLUTTER_WINDOWING_X11) &&
+      CLUTTER_IS_BACKEND_X11 (context->backend))
+    return TRUE;
+  else
+#endif
+  return FALSE;
+}
+
+gboolean
+_clutter_get_sync_to_vblank (void)
+{
+  return clutter_sync_to_vblank;
+}
+
+void
+_clutter_debug_messagev (const char *format,
+                         va_list     var_args)
+{
+  static gint64 last_debug_stamp;
+  gchar *stamp, *fmt;
+  gint64 cur_time, debug_stamp;
+
+  cur_time = g_get_monotonic_time ();
+
+  /* if the last debug message happened less than a second ago, just
+   * show the increments instead of the full timestamp
+   */
+  if (last_debug_stamp == 0 ||
+      cur_time - last_debug_stamp >= G_USEC_PER_SEC)
+    {
+      debug_stamp = cur_time;
+      last_debug_stamp = debug_stamp;
+
+      stamp = g_strdup_printf ("[%16" G_GINT64_FORMAT "]", debug_stamp);
+    }
+  else
+    {
+      debug_stamp = cur_time - last_debug_stamp;
+
+      stamp = g_strdup_printf ("[%+16" G_GINT64_FORMAT "]", debug_stamp);
+    }
+
+  fmt = g_strconcat (stamp, ":", format, NULL);
+  g_free (stamp);
+
+  g_logv (G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, fmt, var_args);
+
+#ifdef CLUTTER_ENABLE_PROFILE
+  if (_clutter_uprof_context != NULL)
+    uprof_context_vtrace_message (_clutter_uprof_context, format, var_args);
+#endif
+
+  g_free (fmt);
+}
+
+void
+_clutter_debug_message (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  _clutter_debug_messagev (format, args);
+  va_end (args);
+}
+
+gboolean
+_clutter_diagnostic_enabled (void)
+{
+  static const char *clutter_enable_diagnostic = NULL;
+
+  if (G_UNLIKELY (clutter_enable_diagnostic == NULL))
+    {
+      clutter_enable_diagnostic = g_getenv ("CLUTTER_ENABLE_DIAGNOSTIC");
+
+      if (clutter_enable_diagnostic == NULL)
+        clutter_enable_diagnostic = "0";
+    }
+
+  return *clutter_enable_diagnostic != '0';
+}
+
+void
+_clutter_diagnostic_message (const char *format, ...)
+{
+  va_list args;
+  char *fmt;
+
+  fmt = g_strconcat ("[DIAGNOSTIC]: ", format, NULL);
+
+  va_start (args, format);
+  g_logv (G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, fmt, args);
+  va_end (args);
+
+  g_free (fmt);
 }

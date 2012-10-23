@@ -632,14 +632,14 @@ clutter_path_parse_description (const gchar  *p,
           node = clutter_path_node_full_new ();
           nodes = g_slist_prepend (nodes, node);
 
-          node->k.type = (*p == 'M' ? CLUTTER_PATH_MOVE_TO
-                          : *p == 'm' ? CLUTTER_PATH_REL_MOVE_TO
-                          : *p == 'L' ? CLUTTER_PATH_LINE_TO
-                          : CLUTTER_PATH_REL_LINE_TO);
+          node->k.type = (*p == 'M' ? CLUTTER_PATH_MOVE_TO :
+                          *p == 'm' ? CLUTTER_PATH_REL_MOVE_TO :
+                          *p == 'L' ? CLUTTER_PATH_LINE_TO :
+                          CLUTTER_PATH_REL_LINE_TO);
           p++;
 
-          if (!clutter_path_parse_number (&p, FALSE, &node->k.points[0].x)
-              || !clutter_path_parse_number (&p, TRUE, &node->k.points[0].y))
+          if (!clutter_path_parse_number (&p, FALSE, &node->k.points[0].x) ||
+              !clutter_path_parse_number (&p, TRUE, &node->k.points[0].y))
             goto fail;
           break;
 
@@ -648,16 +648,16 @@ clutter_path_parse_description (const gchar  *p,
           node = clutter_path_node_full_new ();
           nodes = g_slist_prepend (nodes, node);
 
-          node->k.type = (*p == 'C' ? CLUTTER_PATH_CURVE_TO
-                          : CLUTTER_PATH_REL_CURVE_TO);
+          node->k.type = (*p == 'C' ? CLUTTER_PATH_CURVE_TO :
+                          CLUTTER_PATH_REL_CURVE_TO);
           p++;
 
-          if (!clutter_path_parse_number (&p, FALSE, &node->k.points[0].x)
-              || !clutter_path_parse_number (&p, TRUE, &node->k.points[0].y)
-              || !clutter_path_parse_number (&p, TRUE, &node->k.points[1].x)
-              || !clutter_path_parse_number (&p, TRUE, &node->k.points[1].y)
-              || !clutter_path_parse_number (&p, TRUE, &node->k.points[2].x)
-              || !clutter_path_parse_number (&p, TRUE, &node->k.points[2].y))
+          if (!clutter_path_parse_number (&p, FALSE, &node->k.points[0].x) ||
+              !clutter_path_parse_number (&p, TRUE, &node->k.points[0].y) ||
+              !clutter_path_parse_number (&p, TRUE, &node->k.points[1].x) ||
+              !clutter_path_parse_number (&p, TRUE, &node->k.points[1].y) ||
+              !clutter_path_parse_number (&p, TRUE, &node->k.points[2].x) ||
+              !clutter_path_parse_number (&p, TRUE, &node->k.points[2].y))
             goto fail;
           break;
 
@@ -940,7 +940,7 @@ clutter_path_get_n_nodes (ClutterPath *path)
  * clutter_path_get_node:
  * @path: a #ClutterPath
  * @index_: the node number to retrieve
- * @node: a location to store a copy of the node
+ * @node: (out): a location to store a copy of the node
  *
  * Retrieves the node of the path indexed by @index.
  *
@@ -1244,11 +1244,12 @@ clutter_path_get_description (ClutterPath *path)
   return g_string_free (str, FALSE);
 }
 
-static gint
+static guint
 clutter_path_node_distance (const ClutterKnot *start,
                             const ClutterKnot *end)
 {
-  gint t;
+  gint64 x_d, y_d;
+  float t;
 
   g_return_val_if_fail (start != NULL, 0);
   g_return_val_if_fail (end != NULL, 0);
@@ -1256,21 +1257,12 @@ clutter_path_node_distance (const ClutterKnot *start,
   if (clutter_knot_equal (start, end))
     return 0;
 
-  t = (end->x - start->x) * (end->x - start->x) +
-    (end->y - start->y) * (end->y - start->y);
+  x_d = end->x - start->x;
+  y_d = end->y - start->y;
 
-  /*
-   * If we are using limited precision sqrti implementation, fallback on
-   * clib sqrt if the precission would be less than 10%
-   */
-#if INT_MAX > COGL_SQRTI_ARG_10_PERCENT
-  if (t <= COGL_SQRTI_ARG_10_PERCENT)
-    return cogl_sqrti (t);
-  else
-    return COGL_FLOAT_TO_INT (sqrtf(t));
-#else
-  return cogl_sqrti (t);
-#endif
+  t = floorf (sqrtf ((x_d * x_d) + (y_d * y_d)));
+
+  return (guint) t;
 }
 
 static void
@@ -1384,7 +1376,7 @@ clutter_path_ensure_node_data (ClutterPath *path)
  * clutter_path_get_position:
  * @path: a #ClutterPath
  * @progress: a position along the path as a fraction of its length
- * @position: location to store the position
+ * @position: (out): location to store the position
  *
  * The value in @progress represents a position along the path where
  * 0.0 is the beginning and 1.0 is the end of the path. An

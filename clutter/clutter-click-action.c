@@ -116,6 +116,8 @@ struct _ClutterClickActionPrivate
   gint drag_threshold;
 
   guint press_button;
+  gint press_device_id;
+  ClutterEventSequence *press_sequence;
   ClutterModifierType modifier_state;
   gfloat press_x;
   gfloat press_y;
@@ -277,23 +279,28 @@ on_event (ClutterActor       *actor,
           ClutterClickAction *action)
 {
   ClutterClickActionPrivate *priv = action->priv;
+  gboolean has_button = TRUE;
 
   if (!clutter_actor_meta_get_enabled (CLUTTER_ACTOR_META (action)))
-    return FALSE;
+    return CLUTTER_EVENT_PROPAGATE;
 
   switch (clutter_event_type (event))
     {
+    case CLUTTER_TOUCH_BEGIN:
+      has_button = FALSE;
     case CLUTTER_BUTTON_PRESS:
-      if (clutter_event_get_click_count (event) != 1)
-        return FALSE;
+      if (has_button && clutter_event_get_click_count (event) != 1)
+        return CLUTTER_EVENT_PROPAGATE;
 
       if (priv->is_held)
-        return TRUE;
+        return CLUTTER_EVENT_STOP;
 
       if (!clutter_actor_contains (actor, clutter_event_get_source (event)))
-        return FALSE;
+        return CLUTTER_EVENT_PROPAGATE;
 
-      priv->press_button = clutter_event_get_button (event);
+      priv->press_button = has_button ? clutter_event_get_button (event) : 0;
+      priv->press_device_id = clutter_event_get_device_id (event);
+      priv->press_sequence = clutter_event_get_event_sequence (event);
       priv->modifier_state = clutter_event_get_state (event);
       clutter_event_get_coords (event, &priv->press_x, &priv->press_y);
 
@@ -333,7 +340,7 @@ on_event (ClutterActor       *actor,
       break;
     }
 
-  return FALSE;
+  return CLUTTER_EVENT_PROPAGATE;
 }
 
 static gboolean
@@ -344,18 +351,23 @@ on_captured_event (ClutterActor       *stage,
   ClutterClickActionPrivate *priv = action->priv;
   ClutterActor *actor;
   ClutterModifierType modifier_state;
+  gboolean has_button = TRUE;
 
   actor = clutter_actor_meta_get_actor (CLUTTER_ACTOR_META (action));
 
   switch (clutter_event_type (event))
     {
+    case CLUTTER_TOUCH_END:
+      has_button = FALSE;
     case CLUTTER_BUTTON_RELEASE:
       if (!priv->is_held)
-        return TRUE;
+        return CLUTTER_EVENT_STOP;
 
-      if (clutter_event_get_button (event) != priv->press_button ||
-          clutter_event_get_click_count (event) != 1)
-        return FALSE;
+      if ((has_button && clutter_event_get_button (event) != priv->press_button) ||
+          (has_button && clutter_event_get_click_count (event) != 1) ||
+          clutter_event_get_device_id (event) != priv->press_device_id ||
+          clutter_event_get_event_sequence (event) != priv->press_sequence)
+        return CLUTTER_EVENT_PROPAGATE;
 
       click_action_set_held (action, FALSE);
       click_action_cancel_long_press (action);
@@ -374,7 +386,7 @@ on_captured_event (ClutterActor       *stage,
         }
 
       if (!clutter_actor_contains (actor, clutter_event_get_source (event)))
-        return FALSE;
+        return CLUTTER_EVENT_PROPAGATE;
 
       /* exclude any button-mask so that we can compare
        * the press and release states properly */
@@ -397,12 +409,13 @@ on_captured_event (ClutterActor       *stage,
       break;
 
     case CLUTTER_MOTION:
+    case CLUTTER_TOUCH_UPDATE:
       {
         gfloat motion_x, motion_y;
         gfloat delta_x, delta_y;
 
         if (!priv->is_held)
-          return FALSE;
+          return CLUTTER_EVENT_PROPAGATE;
 
         clutter_event_get_coords (event, &motion_x, &motion_y);
 
@@ -419,7 +432,7 @@ on_captured_event (ClutterActor       *stage,
       break;
     }
 
-  return FALSE;
+  return CLUTTER_EVENT_STOP;
 }
 
 static void
@@ -433,13 +446,17 @@ clutter_click_action_set_actor (ClutterActorMeta *meta,
     {
       ClutterActor *old_actor = clutter_actor_meta_get_actor (meta);
 
-      g_signal_handler_disconnect (old_actor, priv->event_id);
+      if (old_actor != NULL)
+        g_signal_handler_disconnect (old_actor, priv->event_id);
+
       priv->event_id = 0;
     }
 
   if (priv->capture_id != 0)
     {
-      g_signal_handler_disconnect (priv->stage, priv->capture_id);
+      if (priv->stage != NULL)
+        g_signal_handler_disconnect (priv->stage, priv->capture_id);
+
       priv->capture_id = 0;
       priv->stage = NULL;
     }

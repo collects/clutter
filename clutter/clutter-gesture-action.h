@@ -39,7 +39,7 @@ G_BEGIN_DECLS
 #define CLUTTER_IS_GESTURE_ACTION(obj)            (G_TYPE_CHECK_INSTANCE_TYPE ((obj), CLUTTER_TYPE_GESTURE_ACTION))
 #define CLUTTER_GESTURE_ACTION_CLASS(klass)       (G_TYPE_CHECK_CLASS_CAST ((klass), CLUTTER_TYPE_GESTURE_ACTION, ClutterGestureActionClass))
 #define CLUTTER_IS_GESTURE_ACTION_CLASS(klass)    (G_TYPE_CHECK_CLASS_TYPE ((klass), CLUTTER_TYPE_GESTURE_ACTION))
-#define CLUTTER_GESTURE_ACTION_GET_CLASS(obj)     (G_TYPE_INSTANCE_GET_PRIVATE ((obj), CLUTTER_TYPE_GESTURE_ACTION, ClutterGestureActionClass))
+#define CLUTTER_GESTURE_ACTION_GET_CLASS(obj)     (G_TYPE_INSTANCE_GET_CLASS ((obj), CLUTTER_TYPE_GESTURE_ACTION, ClutterGestureActionClass))
 
 typedef struct _ClutterGestureAction              ClutterGestureAction;
 typedef struct _ClutterGestureActionPrivate       ClutterGestureActionPrivate;
@@ -64,9 +64,11 @@ struct _ClutterGestureAction
 /**
  * ClutterGestureActionClass:
  * @gesture_begin: class handler for the #ClutterGestureAction::gesture-begin signal
- * @gesture_progress: class handler for the #ClutterGestureAction::gesture-progres signal
+ * @gesture_progress: class handler for the #ClutterGestureAction::gesture-progress signal
  * @gesture_end: class handler for the #ClutterGestureAction::gesture-end signal
  * @gesture_cancel: class handler for the #ClutterGestureAction::gesture-cancel signal
+ * @gesture_prepare: virtual function called before emitting the
+ *   #ClutterGestureAction::gesture-cancel signal
  *
  * The <structname>ClutterGestureClass</structname> structure contains only
  * private data.
@@ -87,6 +89,8 @@ struct _ClutterGestureActionClass
                                  ClutterActor          *actor);
   void     (* gesture_cancel)   (ClutterGestureAction  *action,
                                  ClutterActor          *actor);
+  gboolean (* gesture_prepare)  (ClutterGestureAction  *action,
+                                 ClutterActor          *actor);
 
   /*< private >*/
   void (* _clutter_gesture_action1) (void);
@@ -95,25 +99,55 @@ struct _ClutterGestureActionClass
   void (* _clutter_gesture_action4) (void);
   void (* _clutter_gesture_action5) (void);
   void (* _clutter_gesture_action6) (void);
-  void (* _clutter_gesture_action7) (void);
 };
 
 GType clutter_gesture_action_get_type (void) G_GNUC_CONST;
 
-ClutterAction * clutter_gesture_action_new                      (void);
+ClutterAction *        clutter_gesture_action_new                      (void);
 
-void            clutter_gesture_action_get_press_coords         (ClutterGestureAction *action,
-                                                                 guint                 device,
-                                                                 gfloat               *press_x,
-                                                                 gfloat               *press_y);
-void            clutter_gesture_action_get_motion_coords        (ClutterGestureAction *action,
-                                                                 guint                 device,
-                                                                 gfloat               *motion_x,
-                                                                 gfloat               *motion_y);
-void            clutter_gesture_action_get_release_coords       (ClutterGestureAction *action,
-                                                                 guint                 device,
-                                                                 gfloat               *release_x,
-                                                                 gfloat               *release_y);
+gint                   clutter_gesture_action_get_n_touch_points   (ClutterGestureAction *action);
+void                   clutter_gesture_action_set_n_touch_points   (ClutterGestureAction *action,
+                                                                    gint                  nb_points);
+void                   clutter_gesture_action_get_press_coords     (ClutterGestureAction *action,
+                                                                    guint                 device,
+                                                                    gfloat               *press_x,
+                                                                    gfloat               *press_y);
+void                   clutter_gesture_action_get_motion_coords    (ClutterGestureAction *action,
+                                                                    guint                 device,
+                                                                    gfloat               *motion_x,
+                                                                    gfloat               *motion_y);
+CLUTTER_AVAILABLE_IN_1_12
+gfloat                 clutter_gesture_action_get_motion_delta     (ClutterGestureAction *action,
+                                                                    guint                 device,
+                                                                    gfloat               *delta_x,
+                                                                    gfloat               *delta_y);
+void                   clutter_gesture_action_get_release_coords   (ClutterGestureAction *action,
+                                                                    guint                 device,
+                                                                    gfloat               *release_x,
+                                                                    gfloat               *release_y);
+CLUTTER_AVAILABLE_IN_1_12
+gfloat                 clutter_gesture_action_get_velocity         (ClutterGestureAction *action,
+                                                                    guint                 device,
+                                                                    gfloat               *velocity_x,
+                                                                    gfloat               *velocity_y);
+
+CLUTTER_AVAILABLE_IN_1_12
+guint                  clutter_gesture_action_get_n_current_points (ClutterGestureAction *action);
+
+CLUTTER_AVAILABLE_IN_1_12
+ClutterEventSequence * clutter_gesture_action_get_sequence         (ClutterGestureAction *action,
+                                                                    guint                 point);
+
+CLUTTER_AVAILABLE_IN_1_12
+ClutterInputDevice *   clutter_gesture_action_get_device           (ClutterGestureAction *action,
+                                                                    guint                 point);
+
+CLUTTER_AVAILABLE_IN_1_14
+const ClutterEvent *   clutter_gesture_action_get_last_event       (ClutterGestureAction *action,
+                                                                    guint                 point);
+
+CLUTTER_AVAILABLE_IN_1_12
+void                   clutter_gesture_action_cancel               (ClutterGestureAction *action);
 
 G_END_DECLS
 

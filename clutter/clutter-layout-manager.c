@@ -42,13 +42,11 @@
  *   <title>Using a Layout Manager inside an Actor</title>
  *   <para>In order to use a #ClutterLayoutManager inside a #ClutterActor
  *   sub-class you should invoke clutter_layout_manager_get_preferred_width()
- *   inside the <structname>ClutterActor</structname>::get_preferred_width()
- *   virtual function and clutter_layout_manager_get_preferred_height()
- *   inside the <structname>ClutterActor</structname>::get_preferred_height()
- *   virtual function implementations. You should also call
- *   clutter_layout_manager_allocate() inside the implementation of the
- *   <structname>ClutterActor</structname>::allocate() virtual
- *   function.</para>
+ *   inside the #ClutterActorClass.get_preferred_width() virtual function and
+ *   clutter_layout_manager_get_preferred_height() inside the
+ *   #ClutterActorClass.get_preferred_height() virtual functions implementation.
+ *   You should also call clutter_layout_manager_allocate() inside the
+ *   implementation of the #ClutterActorClass.allocate() virtual function.</para>
  *   <para>In order to receive notifications for changes in the layout
  *   manager policies you should also connect to the
  *   #ClutterLayoutManager::layout-changed signal and queue a relayout
@@ -93,9 +91,9 @@
  *   <para>It is possible for a #ClutterLayoutManager sub-class to animate its
  *   children layout by using the base class animation support. The
  *   #ClutterLayoutManager animation support consists of three virtual
- *   functions: <function>begin_animation()</function>,
- *   <function>get_animation_progress()</function> and
- *   <function>end_animation()</function>.</para>
+ *   functions: #ClutterLayoutManagerClass.begin_animation(),
+ *   #ClutterLayoutManagerClass.get_animation_progress(), and
+ *   #ClutterLayoutManagerClass.end_animation().</para>
  *   <variablelist>
  *     <varlistentry>
  *       <term><function>begin_animation (duration, easing)</function></term>
@@ -131,20 +129,20 @@
  *   clutter_layout_manager_end_animation() to be called. The default
  *   implementation provided internally by #ClutterLayoutManager does exactly
  *   this, so most sub-classes should either not override any animation-related
- *   virtual function or simply override <function>begin_animation()</function>
- *   and <function>end_animation()</function> to set up ad hoc state, and then
+ *   virtual function or simply override #ClutterLayoutManagerClass.begin_animation()
+ *   and #ClutterLayoutManagerClass.end_animation() to set up ad hoc state, and then
  *   chain up to the parent's implementation.</para>
  *   <example id="example-ClutterLayoutManager-animation">
  *     <title>Animation of a Layout Manager</title>
  *     <para>The code below shows how a #ClutterLayoutManager sub-class should
  *     provide animating the allocation of its children from within the
- *     <function>allocate()</function> virtual function implementation. The
+ *     #ClutterLayoutManagerClass.allocate() virtual function implementation. The
  *     animation is computed between the last stable allocation performed
  *     before the animation started and the desired final allocation.</para>
  *     <para>The <varname>is_animating</varname> variable is stored inside the
  *     #ClutterLayoutManager sub-class and it is updated by overriding the
- *     <function>begin_animation()</function> and
- *     <function>end_animation()</function> virtual functions and chaining up
+ *     #ClutterLayoutManagerClass.begin_animation() and the
+ *     #ClutterLayoutManagerClass.end_animation() virtual functions and chaining up
  *     to the base class implementation.</para>
  *     <para>The last stable allocation is stored within a #ClutterLayoutMeta
  *     sub-class used by the implementation.</para>
@@ -156,13 +154,12 @@
  *                             ClutterAllocationFlags  flags)
  * {
  *   MyLayoutManager *self = MY_LAYOUT_MANAGER (manager);
- *   GList *children, *l;
+ *   ClutterActor *child;
  *
- *   children = clutter_container_get_children (container);
- *
- *   for (l = children; l != NULL; l = l-&gt;next)
+ *   for (child = clutter_actor_get_first_child (CLUTTER_ACTOR (container));
+ *        child != NULL;
+ *        child = clutter_actor_get_next_sibling (child))
  *     {
- *       ClutterActor *child = l->data;
  *       ClutterLayoutMeta *meta;
  *       MyLayoutMeta *my_meta;
  *
@@ -223,8 +220,6 @@
  *       /&ast; allocate the child &ast;/
  *       clutter_actor_allocate (child, &child_box, flags);
  *     }
- *
- *   g_list_free (children);
  * }
  *     </programlisting>
  *   </example>
@@ -257,13 +252,12 @@
  *   should exist only as the result of the presence of a specific (layout
  *   manager, container actor, child actor) combination, and it wishes to store
  *   those properties inside a #ClutterLayoutMeta, then it should override the
- *   <structname>ClutterLayoutManager</structname>::get_child_meta_type()
- *   virtual function to return the #GType of the #ClutterLayoutMeta sub-class
- *   used to store the layout properties; optionally, the #ClutterLayoutManager
- *   sub-class might also override the
- *   <structname>ClutterLayoutManager</structname>::create_child_meta() virtual
- *   function to control how the #ClutterLayoutMeta instance is created,
- *   otherwise the default implementation will be equivalent to:</para>
+ *   #ClutterLayoutManagerClass.get_child_meta_type() virtual function to return
+ *   the #GType of the #ClutterLayoutMeta sub-class used to store the layout
+ *   properties; optionally, the #ClutterLayoutManager sub-class might also
+ *   override the #ClutterLayoutManagerClass.create_child_meta() virtual function
+ *   to control how the #ClutterLayoutMeta instance is created, otherwise the
+ *   default implementation will be equivalent to:</para>
  *   <informalexample><programlisting>
  *  ClutterLayoutManagerClass *klass;
  *  GType meta_type;
@@ -321,7 +315,6 @@
  *   ]
  * }
  *   </programlisting></informalexample>
- *
  * </refsect2>
  *
  * #ClutterLayoutManager is available since Clutter 1.2
@@ -334,7 +327,10 @@
 #include <glib-object.h>
 #include <gobject/gvaluecollector.h>
 
-#include "clutter-alpha.h"
+#define CLUTTER_DISABLE_DEPRECATION_WARNINGS
+#include "deprecated/clutter-container.h"
+#include "deprecated/clutter-alpha.h"
+
 #include "clutter-debug.h"
 #include "clutter-layout-manager.h"
 #include "clutter-layout-meta.h"
@@ -348,6 +344,11 @@
                    "the ClutterLayoutManager::%s method",               \
                    G_OBJECT_TYPE_NAME (_obj),                           \
                    (method));                           } G_STMT_END
+
+struct _ClutterLayoutManagerPrivate
+{
+  gpointer dummy;
+};
 
 enum
 {
@@ -498,6 +499,7 @@ layout_manager_real_get_child_meta_type (ClutterLayoutManager *manager)
   return G_TYPE_INVALID;
 }
 
+/* XXX:2.0 - Remove */
 static ClutterAlpha *
 layout_manager_real_begin_animation (ClutterLayoutManager *manager,
                                      guint                 duration,
@@ -541,6 +543,7 @@ layout_manager_real_begin_animation (ClutterLayoutManager *manager,
   return alpha;
 }
 
+/* XXX:2.0 - Remove */
 static gdouble
 layout_manager_real_get_animation_progress (ClutterLayoutManager *manager)
 {
@@ -553,6 +556,7 @@ layout_manager_real_get_animation_progress (ClutterLayoutManager *manager)
   return clutter_alpha_get_alpha (alpha);
 }
 
+/* XXX:2.0 - Remove */
 static void
 layout_manager_real_end_animation (ClutterLayoutManager *manager)
 {
@@ -586,14 +590,20 @@ clutter_layout_manager_class_init (ClutterLayoutManagerClass *klass)
 {
   quark_layout_meta =
     g_quark_from_static_string ("clutter-layout-manager-child-meta");
+
+  /* XXX:2.0 - Remove */
   quark_layout_alpha =
     g_quark_from_static_string ("clutter-layout-manager-alpha");
+
+  g_type_class_add_private (klass, sizeof (ClutterLayoutManagerPrivate));
 
   klass->get_preferred_width = layout_manager_real_get_preferred_width;
   klass->get_preferred_height = layout_manager_real_get_preferred_height;
   klass->allocate = layout_manager_real_allocate;
   klass->create_child_meta = layout_manager_real_create_child_meta;
   klass->get_child_meta_type = layout_manager_real_get_child_meta_type;
+
+  /* XXX:2.0 - Remove */
   klass->begin_animation = layout_manager_real_begin_animation;
   klass->get_animation_progress = layout_manager_real_get_animation_progress;
   klass->end_animation = layout_manager_real_end_animation;
@@ -642,6 +652,9 @@ clutter_layout_manager_class_init (ClutterLayoutManagerClass *klass)
 static void
 clutter_layout_manager_init (ClutterLayoutManager *manager)
 {
+  manager->priv =
+    G_TYPE_INSTANCE_GET_PRIVATE (manager, CLUTTER_TYPE_LAYOUT_MANAGER,
+                                 ClutterLayoutManagerPrivate);
 }
 
 /**
@@ -984,7 +997,7 @@ clutter_layout_manager_child_set (ClutterLayoutManager *manager,
   pname = first_property;
   while (pname)
     {
-      GValue value = { 0, };
+      GValue value = G_VALUE_INIT;
       GParamSpec *pspec;
       gchar *error;
       gboolean res;
@@ -1124,7 +1137,7 @@ clutter_layout_manager_child_get (ClutterLayoutManager *manager,
   pname = first_property;
   while (pname)
     {
-      GValue value = { 0, };
+      GValue value = G_VALUE_INIT;
       GParamSpec *pspec;
       gchar *error;
       gboolean res;
@@ -1297,82 +1310,4 @@ clutter_layout_manager_list_child_properties (ClutterLayoutManager *manager,
   g_type_class_unref (meta_klass);
 
   return pspecs;
-}
-
-/**
- * clutter_layout_manager_begin_animation:
- * @manager: a #ClutterLayoutManager
- * @duration: the duration of the animation, in milliseconds
- * @mode: the easing mode of the animation
- *
- * Begins an animation of @duration milliseconds, using the provided
- * easing @mode
- *
- * The easing mode can be specified either as a #ClutterAnimationMode
- * or as a logical id returned by clutter_alpha_register_func()
- *
- * The result of this function depends on the @manager implementation
- *
- * Return value: (transfer none): The #ClutterAlpha created by the
- *   layout manager; the returned instance is owned by the layout
- *   manager and should not be unreferenced
- *
- * Since: 1.2
- */
-ClutterAlpha *
-clutter_layout_manager_begin_animation (ClutterLayoutManager *manager,
-                                        guint                 duration,
-                                        gulong                mode)
-{
-  ClutterLayoutManagerClass *klass;
-
-  g_return_val_if_fail (CLUTTER_IS_LAYOUT_MANAGER (manager), NULL);
-
-  klass = CLUTTER_LAYOUT_MANAGER_GET_CLASS (manager);
-
-  return klass->begin_animation (manager, duration, mode);
-}
-
-/**
- * clutter_layout_manager_end_animation:
- * @manager: a #ClutterLayoutManager
- *
- * Ends an animation started by clutter_layout_manager_begin_animation()
- *
- * The result of this call depends on the @manager implementation
- *
- * Since: 1.2
- */
-void
-clutter_layout_manager_end_animation (ClutterLayoutManager *manager)
-{
-  g_return_if_fail (CLUTTER_IS_LAYOUT_MANAGER (manager));
-
-  CLUTTER_LAYOUT_MANAGER_GET_CLASS (manager)->end_animation (manager);
-}
-
-/**
- * clutter_layout_manager_get_animation_progress:
- * @manager: a #ClutterLayoutManager
- *
- * Retrieves the progress of the animation, if one has been started by
- * clutter_layout_manager_begin_animation()
- *
- * The returned value has the same semantics of the #ClutterAlpha:alpha
- * value
- *
- * Return value: the progress of the animation
- *
- * Since: 1.2
- */
-gdouble
-clutter_layout_manager_get_animation_progress (ClutterLayoutManager *manager)
-{
-  ClutterLayoutManagerClass *klass;
-
-  g_return_val_if_fail (CLUTTER_IS_LAYOUT_MANAGER (manager), 1.0);
-
-  klass = CLUTTER_LAYOUT_MANAGER_GET_CLASS (manager);
-
-  return klass->get_animation_progress (manager);
 }

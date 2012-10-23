@@ -80,7 +80,7 @@
  * <example id="bind-constraint-example">
  *   <title>Animating the offset property of ClutterBindConstraint</title>
  *   <programlisting>
- * <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" parse="text" href="../../../../tests/interactive/test-constraints.c">
+ * <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" parse="text" href="../../../../tests/interactive/test-bind-constraint.c">
  *   <xi:fallback>FIXME: MISSING XINCLUDE CONTENT</xi:fallback>
  * </xi:include>
  *   </programlisting>
@@ -212,10 +212,19 @@ clutter_bind_constraint_update_allocation (ClutterConstraint *constraint,
       allocation->y2 = allocation->y1 + source_height + bind->offset;
       break;
 
+    case CLUTTER_BIND_ALL:
+      allocation->x1 = source_position.x + bind->offset;
+      allocation->y1 = source_position.y + bind->offset;
+      allocation->x2 = allocation->x1 + source_width + bind->offset;
+      allocation->y2 = allocation->y1 + source_height + bind->offset;
+      break;
+
     default:
       g_assert_not_reached ();
       break;
     }
+
+  clutter_actor_box_clamp_to_pixel (allocation);
 }
 
 static void

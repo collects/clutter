@@ -234,12 +234,10 @@
 #include <glib-object.h>
 #include <gmodule.h>
 
+#define CLUTTER_DISABLE_DEPRECATION_WARNINGS
+
 #include "clutter-actor.h"
-#include "clutter-alpha.h"
-#include "clutter-behaviour.h"
-#include "clutter-container.h"
 #include "clutter-stage.h"
-#include "clutter-state.h"
 #include "clutter-texture.h"
 
 #include "clutter-script.h"
@@ -250,20 +248,25 @@
 #include "clutter-private.h"
 #include "clutter-debug.h"
 
+#include "deprecated/clutter-alpha.h"
+#include "deprecated/clutter-behaviour.h"
+#include "deprecated/clutter-container.h"
+#include "deprecated/clutter-state.h"
+
 enum
 {
   PROP_0,
 
   PROP_FILENAME_SET,
   PROP_FILENAME,
+  PROP_TRANSLATION_DOMAIN,
 
   PROP_LAST
 };
 
 static GParamSpec *obj_props[PROP_LAST];
 
-#define CLUTTER_SCRIPT_GET_PRIVATE(obj) \
-        (G_TYPE_INSTANCE_GET_PRIVATE ((obj), CLUTTER_TYPE_SCRIPT, ClutterScriptPrivate))
+#define CLUTTER_SCRIPT_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE ((obj), CLUTTER_TYPE_SCRIPT, ClutterScriptPrivate))
 
 struct _ClutterScriptPrivate
 {
@@ -277,6 +280,8 @@ struct _ClutterScriptPrivate
   GHashTable *states;
 
   gchar **search_paths;
+
+  gchar *translation_domain;
 
   gchar *filename;
   guint is_filename : 1;
@@ -316,7 +321,7 @@ property_info_free (gpointer data)
     }
 }
 
-void
+static void
 signal_info_free (gpointer data)
 {
   if (G_LIKELY (data))
@@ -385,8 +390,29 @@ clutter_script_finalize (GObject *gobject)
   g_strfreev (priv->search_paths);
   g_free (priv->filename);
   g_hash_table_destroy (priv->states);
+  g_free (priv->translation_domain);
 
   G_OBJECT_CLASS (clutter_script_parent_class)->finalize (gobject);
+}
+
+static void
+clutter_script_set_property (GObject      *gobject,
+                             guint         prop_id,
+                             const GValue *value,
+                             GParamSpec   *pspec)
+{
+  ClutterScript *script = CLUTTER_SCRIPT (gobject);
+
+  switch (prop_id)
+    {
+    case PROP_TRANSLATION_DOMAIN:
+      clutter_script_set_translation_domain (script, g_value_get_string (value));
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (gobject, prop_id, pspec);
+      break;
+    }
 }
 
 static void
@@ -402,9 +428,15 @@ clutter_script_get_property (GObject    *gobject,
     case PROP_FILENAME_SET:
       g_value_set_boolean (value, script->priv->is_filename);
       break;
+
     case PROP_FILENAME:
       g_value_set_string (value, script->priv->filename);
       break;
+
+    case PROP_TRANSLATION_DOMAIN:
+      g_value_set_string (value, script->priv->translation_domain);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (gobject, prop_id, pspec);
       break;
@@ -451,6 +483,25 @@ clutter_script_class_init (ClutterScriptClass *klass)
                          NULL,
                          CLUTTER_PARAM_READABLE);
 
+  /**
+   * ClutterScript:translation-domain:
+   *
+   * The translation domain, used to localize strings marked as translatable
+   * inside a UI definition.
+   *
+   * If #ClutterScript:translation-domain is set to %NULL, #ClutterScript
+   * will use gettext(), otherwise g_dgettext() will be used.
+   *
+   * Since: 1.10
+   */
+  obj_props[PROP_TRANSLATION_DOMAIN] =
+    g_param_spec_string ("translation-domain",
+                         P_("Translation Domain"),
+                         P_("The translation domain used to localize string"),
+                         NULL,
+                         CLUTTER_PARAM_READWRITE);
+
+  gobject_class->set_property = clutter_script_set_property;
   gobject_class->get_property = clutter_script_get_property;
   gobject_class->finalize = clutter_script_finalize;
 
@@ -598,6 +649,45 @@ clutter_script_load_from_data (ClutterScript  *script,
     }
 
   return priv->last_merge_id;
+}
+
+/**
+ * clutter_script_load_from_resource:
+ * @script: a #ClutterScript
+ * @resource_path: the resource path of the file to parse
+ * @error: return location for a #GError, or %NULL
+ *
+ * Loads the definitions from a resource file into @script and merges with
+ * the currently loaded ones, if any.
+ *
+ * Return value: on error, zero is returned and @error is set
+ *   accordingly. On success, the merge id for the UI definitions is
+ *   returned. You can use the merge id with clutter_script_unmerge_objects().
+ *
+ * Since: 1.10
+ */
+guint
+clutter_script_load_from_resource (ClutterScript  *script,
+                                   const gchar    *resource_path,
+                                   GError        **error)
+{
+  GBytes *data;
+  guint res;
+
+  g_return_val_if_fail (CLUTTER_IS_SCRIPT (script), 0);
+
+  data = g_resources_lookup_data (resource_path, 0, error);
+  if (data == NULL)
+    return 0;
+
+  res = clutter_script_load_from_data (script,
+                                       g_bytes_get_data (data, NULL),
+                                       g_bytes_get_size (data),
+                                       error);
+
+  g_bytes_unref (data);
+
+  return res;
 }
 
 /**
@@ -1128,9 +1218,9 @@ connect_each_object (gpointer key,
 }
 
 /**
- * clutter_script_connect_signals_full: (skip)
+ * clutter_script_connect_signals_full:
  * @script: a #ClutterScript
- * @func: signal connection function
+ * @func: (scope call): signal connection function
  * @user_data: data to be passed to the signal handlers, or %NULL
  *
  * Connects all the signals defined into a UI definition file to their
@@ -1355,6 +1445,8 @@ clutter_script_list_objects (ClutterScript *script)
  * passed to this function.
  *
  * Since: 1.8
+ *
+ * Deprecated: 1.12
  */
 void
 clutter_script_add_states (ClutterScript *script,
@@ -1387,6 +1479,8 @@ clutter_script_add_states (ClutterScript *script,
  *   and it should not be unreferenced
  *
  * Since: 1.8
+ *
+ * Deprecated: 1.12
  */
 ClutterState *
 clutter_script_get_states (ClutterScript *script,
@@ -1398,6 +1492,50 @@ clutter_script_get_states (ClutterScript *script,
     name = "__clutter_script_default_state";
 
   return g_hash_table_lookup (script->priv->states, name);
+}
+
+/**
+ * clutter_script_set_translation_domain:
+ * @script: a #ClutterScript
+ * @domain: (allow-none): the translation domain, or %NULL
+ *
+ * Sets the translation domain for @script.
+ *
+ * Since: 1.10
+ */
+void
+clutter_script_set_translation_domain (ClutterScript *script,
+                                       const gchar   *domain)
+{
+  g_return_if_fail (CLUTTER_IS_SCRIPT (script));
+
+  if (g_strcmp0 (domain, script->priv->translation_domain) == 0)
+    return;
+
+  g_free (script->priv->translation_domain);
+  script->priv->translation_domain = g_strdup (domain);
+
+  g_object_notify_by_pspec (G_OBJECT (script), obj_props[PROP_TRANSLATION_DOMAIN]);
+}
+
+/**
+ * clutter_script_get_translation_domain:
+ * @script: a #ClutterScript
+ *
+ * Retrieves the translation domain set using
+ * clutter_script_set_translation_domain().
+ *
+ * Return value: (transfer none): the translation domain, if any is set,
+ *   or %NULL
+ *
+ * Since: 1.10
+ */
+const gchar *
+clutter_script_get_translation_domain (ClutterScript *script)
+{
+  g_return_val_if_fail (CLUTTER_IS_SCRIPT (script), NULL);
+
+  return script->priv->translation_domain;
 }
 
 /*

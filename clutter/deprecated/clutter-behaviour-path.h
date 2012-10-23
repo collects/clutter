@@ -80,7 +80,7 @@ struct _ClutterBehaviourPath
 };
 
 /**
- * ClutterBehaviourPathClass
+ * ClutterBehaviourPathClass:
  * @knot_reached: signal class handler for the
  *   ClutterBehaviourPath::knot_reached signal
  *
@@ -106,27 +106,28 @@ struct _ClutterBehaviourPathClass
   void (*_clutter_path_4) (void);
 };
 
+CLUTTER_DEPRECATED_IN_1_6
 GType clutter_behaviour_path_get_type (void) G_GNUC_CONST;
 
-CLUTTER_DEPRECATED_FOR(clutter_actor_animate)
+CLUTTER_DEPRECATED_IN_1_6_FOR(clutter_actor_animate)
 ClutterBehaviour *clutter_behaviour_path_new          (ClutterAlpha         *alpha,
                                                        ClutterPath          *path);
 
-CLUTTER_DEPRECATED_FOR(clutter_actor_animate)
+CLUTTER_DEPRECATED_IN_1_6_FOR(clutter_actor_animate)
 ClutterBehaviour *clutter_behaviour_path_new_with_description
                                                       (ClutterAlpha         *alpha,
                                                        const gchar          *desc);
 
-CLUTTER_DEPRECATED_FOR(clutter_actor_animate)
+CLUTTER_DEPRECATED_IN_1_6_FOR(clutter_actor_animate)
 ClutterBehaviour *clutter_behaviour_path_new_with_knots
                                                       (ClutterAlpha         *alpha,
                                                        const ClutterKnot    *knots,
                                                        guint                 n_knots);
 
-CLUTTER_DEPRECATED
+CLUTTER_DEPRECATED_IN_1_6
 void              clutter_behaviour_path_set_path     (ClutterBehaviourPath *pathb,
                                                        ClutterPath          *path);
-CLUTTER_DEPRECATED
+CLUTTER_DEPRECATED_IN_1_6
 ClutterPath *     clutter_behaviour_path_get_path     (ClutterBehaviourPath *pathb);
 
 G_END_DECLS

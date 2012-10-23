@@ -101,26 +101,33 @@ void                  clutter_table_layout_get_span            (ClutterTableLayo
                                                                 ClutterActor          *actor,
                                                                 gint                  *column_span,
                                                                 gint                  *row_span);
+
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_set_alignment       (ClutterTableLayout    *layout,
                                                                 ClutterActor          *actor,
                                                                 ClutterTableAlignment  x_align,
                                                                 ClutterTableAlignment  y_align);
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_get_alignment       (ClutterTableLayout    *layout,
                                                                 ClutterActor          *actor,
                                                                 ClutterTableAlignment *x_align,
                                                                 ClutterTableAlignment *y_align);
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_set_fill            (ClutterTableLayout    *layout,
                                                                 ClutterActor          *actor,
                                                                 gboolean               x_fill,
                                                                 gboolean               y_fill);
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_get_fill            (ClutterTableLayout    *layout,
                                                                 ClutterActor          *actor,
                                                                 gboolean              *x_fill,
                                                                 gboolean              *y_fill);
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_set_expand          (ClutterTableLayout    *layout,
                                                                 ClutterActor          *actor,
                                                                 gboolean               x_expand,
                                                                 gboolean               y_expand);
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_get_expand          (ClutterTableLayout    *layout,
                                                                 ClutterActor          *actor,
                                                                 gboolean              *x_expand,
@@ -129,14 +136,20 @@ void                  clutter_table_layout_get_expand          (ClutterTableLayo
 gint                  clutter_table_layout_get_row_count       (ClutterTableLayout    *layout);
 gint                  clutter_table_layout_get_column_count    (ClutterTableLayout    *layout);
 
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_set_use_animations  (ClutterTableLayout    *layout,
                                                                 gboolean               animate);
+CLUTTER_DEPRECATED_IN_1_12
 gboolean              clutter_table_layout_get_use_animations  (ClutterTableLayout    *layout);
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_set_easing_mode     (ClutterTableLayout    *layout,
                                                                 gulong                 mode);
+CLUTTER_DEPRECATED_IN_1_12
 gulong                clutter_table_layout_get_easing_mode     (ClutterTableLayout    *layout);
+CLUTTER_DEPRECATED_IN_1_12
 void                  clutter_table_layout_set_easing_duration (ClutterTableLayout    *layout,
                                                                 guint                  msecs);
+CLUTTER_DEPRECATED_IN_1_12
 guint                 clutter_table_layout_get_easing_duration (ClutterTableLayout    *layout);
 
 G_END_DECLS

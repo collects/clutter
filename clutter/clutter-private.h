@@ -40,11 +40,13 @@
 #include "clutter-layout-manager.h"
 #include "clutter-master-clock.h"
 #include "clutter-settings.h"
+#include "clutter-stage-manager.h"
 #include "clutter-stage.h"
 
 G_BEGIN_DECLS
 
 typedef struct _ClutterMainContext      ClutterMainContext;
+typedef struct _ClutterVertex4          ClutterVertex4;
 
 #define CLUTTER_REGISTER_VALUE_TRANSFORM_TO(TYPE_TO,func)             { \
   g_value_register_transform_func (g_define_type_id, TYPE_TO, func);    \
@@ -73,6 +75,8 @@ typedef struct _ClutterMainContext      ClutterMainContext;
 #define CLUTTER_PARAM_READABLE  (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS)
 #define CLUTTER_PARAM_WRITABLE  (G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS)
 #define CLUTTER_PARAM_READWRITE (G_PARAM_READABLE | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS)
+
+#define CLUTTER_PARAM_ANIMATABLE        (1 << G_PARAM_USER_SHIFT)
 
 /* automagic interning of a static string */
 #define I_(str)  (g_intern_static_string ((str)))
@@ -124,11 +128,14 @@ struct _ClutterMainContext
   /* the main windowing system backend */
   ClutterBackend *backend;
 
+  /* the object holding all the stage instances */
+  ClutterStageManager *stage_manager;
+
+  /* the clock driving all the frame operations */
+  ClutterMasterClock *master_clock;
+
   /* the main event queue */
   GQueue *events_queue;
-
-  /* timer used to print the FPS count */
-  GTimer *timer;
 
   ClutterPickMode  pick_mode;
 
@@ -173,6 +180,7 @@ struct _ClutterMainContext
   guint motion_events_per_actor : 1;
   guint defer_display_setup     : 1;
   guint options_parsed          : 1;
+  guint show_fps                : 1;
 };
 
 /* shared between clutter-main.c and clutter-frame-source.c */
@@ -185,6 +193,9 @@ typedef struct
 
 gboolean _clutter_threads_dispatch      (gpointer data);
 void     _clutter_threads_dispatch_free (gpointer data);
+
+void                    _clutter_threads_acquire_lock                   (void);
+void                    _clutter_threads_release_lock                   (void);
 
 ClutterMainContext *    _clutter_context_get_default                    (void);
 void                    _clutter_context_lock                           (void);
@@ -199,10 +210,15 @@ ClutterActor *          _clutter_context_peek_shader_stack              (void);
 guint32                 _clutter_context_acquire_id                     (gpointer      key);
 void                    _clutter_context_release_id                     (guint32       id_);
 gboolean                _clutter_context_get_motion_events_enabled      (void);
+gboolean                _clutter_context_get_show_fps                   (void);
 
 const gchar *_clutter_gettext (const gchar *str);
 
 gboolean      _clutter_feature_init (GError **error);
+
+/* Diagnostic mode */
+gboolean        _clutter_diagnostic_enabled     (void);
+void            _clutter_diagnostic_message     (const char *fmt, ...);
 
 /* Picking code */
 guint           _clutter_pixel_to_id            (guchar        pixel[4]);
@@ -210,6 +226,8 @@ void            _clutter_id_to_color            (guint         id,
                                                  ClutterColor *col);
 ClutterActor *  _clutter_get_actor_by_id        (ClutterStage *stage,
                                                  guint32       actor_id);
+
+gboolean        _clutter_get_sync_to_vblank     (void);
 
 /* use this function as the accumulator if you have a signal with
  * a G_TYPE_BOOLEAN return value; this will stop the emission as
@@ -220,7 +238,16 @@ gboolean _clutter_boolean_handled_accumulator (GSignalInvocationHint *ihint,
                                                const GValue          *handler_return,
                                                gpointer               dummy);
 
-void _clutter_run_repaint_functions (void);
+/* use this function as the accumulator if you have a signal with
+ * a G_TYPE_BOOLEAN return value; this will stop the emission as
+ * soon as one handler returns FALSE
+ */
+gboolean _clutter_boolean_continue_accumulator (GSignalInvocationHint *ihint,
+                                                GValue                *return_accu,
+                                                const GValue          *handler_return,
+                                                gpointer               dummy);
+
+void _clutter_run_repaint_functions (ClutterRepaintFlags flags);
 
 void _clutter_constraint_update_allocation (ClutterConstraint *constraint,
                                             ClutterActor      *actor,
@@ -239,10 +266,48 @@ void _clutter_util_rectangle_union (const cairo_rectangle_int_t *src1,
                                     const cairo_rectangle_int_t *src2,
                                     cairo_rectangle_int_t       *dest);
 
+
+struct _ClutterVertex4
+{
+  float x;
+  float y;
+  float z;
+  float w;
+};
+
+void
+_clutter_util_vertex4_interpolate (const ClutterVertex4 *a,
+                                   const ClutterVertex4 *b,
+                                   double                progress,
+                                   ClutterVertex4       *res);
+
+#define CLUTTER_MATRIX_INIT_IDENTITY { \
+  1.0f, 0.0f, 0.0f, 0.0f, \
+  0.0f, 1.0f, 0.0f, 0.0f, \
+  0.0f, 0.0f, 1.0f, 0.0f, \
+  0.0f, 0.0f, 0.0f, 1.0f, \
+}
+
+float   _clutter_util_matrix_determinant        (const ClutterMatrix *matrix);
+
+void    _clutter_util_matrix_skew_xy            (ClutterMatrix *matrix,
+                                                 float          factor);
+void    _clutter_util_matrix_skew_xz            (ClutterMatrix *matrix,
+                                                 float          factor);
+void    _clutter_util_matrix_skew_yz            (ClutterMatrix *matrix,
+                                                 float          factor);
+
+gboolean        _clutter_util_matrix_decompose  (const ClutterMatrix *src,
+                                                 ClutterVertex       *scale_p,
+                                                 float                shear_p[3],
+                                                 ClutterVertex       *rotate_p,
+                                                 ClutterVertex       *translate_p,
+                                                 ClutterVertex4      *perspective_p);
+
 typedef struct _ClutterPlane
 {
-  CoglVector3 v0;
-  CoglVector3 n;
+  float v0[3];
+  float n[3];
 } ClutterPlane;
 
 typedef enum _ClutterCullResult
@@ -252,6 +317,13 @@ typedef enum _ClutterCullResult
   CLUTTER_CULL_RESULT_OUT,
   CLUTTER_CULL_RESULT_PARTIAL
 } ClutterCullResult;
+
+gboolean        _clutter_has_progress_function  (GType gtype);
+gboolean        _clutter_run_progress_function  (GType gtype,
+                                                 const GValue *initial,
+                                                 const GValue *final,
+                                                 gdouble progress,
+                                                 GValue *retval);
 
 G_END_DECLS
 

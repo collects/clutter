@@ -67,6 +67,12 @@
  * #ClutterTableLayout:easing-mode and #ClutterTableLayout:easing-duration
  * properties and their accessor functions.
  *
+ * <figure id="table-layout-image">
+ *   <title>Table layout</title>
+ *   <para>The image shows a #ClutterTableLayout.</para>
+ *   <graphic fileref="table-layout.png" format="PNG"/>
+ * </figure>
+ *
  * #ClutterTableLayout is available since Clutter 1.4
  */
 
@@ -75,6 +81,10 @@
 #endif
 
 #include <math.h>
+
+#define CLUTTER_DISABLE_DEPRECATION_WARNINGS
+#include "deprecated/clutter-container.h"
+#include "deprecated/clutter-alpha.h"
 
 #include "clutter-table-layout.h"
 
@@ -99,7 +109,6 @@ typedef struct _DimensionData {
   gfloat final_size;
 
   guint expand  : 1;
-  guint shrink  : 1;
   guint visible : 1;
 } DimensionData;
 
@@ -131,12 +140,6 @@ struct _ClutterTableChild
 {
   ClutterLayoutMeta parent_instance;
 
-  /* the last stable allocation before an animation; it is used as the
-   * initial ActorBox when interpolating. If has_last_allocation is
-   * FALSE then this value is not yet known
-   */
-  ClutterActorBox last_allocation;
-
   gint col;
   gint row;
 
@@ -150,7 +153,6 @@ struct _ClutterTableChild
   guint y_expand            : 1;
   guint x_fill              : 1;
   guint y_fill              : 1;
-  guint has_last_allocation : 1;
 };
 
 enum
@@ -179,6 +181,8 @@ enum
   PROP_EASING_MODE,
   PROP_EASING_DURATION
 };
+
+GType clutter_table_child_get_type (void);
 
 G_DEFINE_TYPE (ClutterTableChild,
                clutter_table_child,
@@ -216,21 +220,11 @@ table_child_set_position (ClutterTableChild *self,
   if (row_changed || col_changed)
     {
       ClutterLayoutManager *layout;
-      ClutterTableLayoutPrivate *priv;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      priv = CLUTTER_TABLE_LAYOUT (layout)->priv;
+      clutter_layout_manager_layout_changed (layout);
 
       g_object_freeze_notify (G_OBJECT (self));
-
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
 
       if (row_changed)
         g_object_notify (G_OBJECT (self), "row");
@@ -266,19 +260,9 @@ table_child_set_span (ClutterTableChild  *self,
   if (row_changed || col_changed)
     {
       ClutterLayoutManager *layout;
-      ClutterTableLayout *table;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      table = CLUTTER_TABLE_LAYOUT (layout);
-
-      if (table->priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  table->priv->easing_duration,
-                                                  table->priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
+      clutter_layout_manager_layout_changed (layout);
 
       if (row_changed)
         g_object_notify (G_OBJECT (self), "row-span");
@@ -312,25 +296,19 @@ table_child_set_align (ClutterTableChild     *self,
   if (x_changed || y_changed)
     {
       ClutterLayoutManager *layout;
-      ClutterTableLayout *table;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      table = CLUTTER_TABLE_LAYOUT (layout);
+      clutter_layout_manager_layout_changed (layout);
 
-      if (table->priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  table->priv->easing_duration,
-                                                  table->priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
+      g_object_freeze_notify (G_OBJECT (self));
 
       if (x_changed)
         g_object_notify (G_OBJECT (self), "x-align");
 
       if (y_changed)
         g_object_notify (G_OBJECT (self), "y-align");
+
+      g_object_thaw_notify (G_OBJECT (self));
     }
 }
 
@@ -361,21 +339,11 @@ table_child_set_fill (ClutterTableChild *self,
   if (x_changed || y_changed)
     {
       ClutterLayoutManager *layout;
-      ClutterTableLayoutPrivate *priv;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      priv = CLUTTER_TABLE_LAYOUT (layout)->priv;
+      clutter_layout_manager_layout_changed (layout);
 
       g_object_freeze_notify (G_OBJECT (self));
-
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
 
       if (x_changed)
         g_object_notify (G_OBJECT (self), "x-fill");
@@ -414,21 +382,11 @@ table_child_set_expand (ClutterTableChild *self,
   if (x_changed || y_changed)
     {
       ClutterLayoutManager *layout;
-      ClutterTableLayoutPrivate *priv;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      priv = CLUTTER_TABLE_LAYOUT (layout)->priv;
+      clutter_layout_manager_layout_changed (layout);
 
       g_object_freeze_notify (G_OBJECT (self));
-
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
 
       if (x_changed)
         g_object_notify (G_OBJECT (self), "x-expand");
@@ -500,14 +458,14 @@ clutter_table_child_set_property (GObject      *gobject,
 
     case PROP_CHILD_X_EXPAND:
       table_child_set_expand (self,
-                            g_value_get_boolean (value),
-                            self->y_expand);
+                              g_value_get_boolean (value),
+                              self->y_expand);
       break;
 
     case PROP_CHILD_Y_EXPAND:
       table_child_set_expand (self,
-                            self->x_expand,
-                            g_value_get_boolean (value));
+                              self->x_expand,
+                              g_value_get_boolean (value));
       break;
 
     default:
@@ -686,8 +644,6 @@ clutter_table_child_init (ClutterTableChild *self)
 
   self->x_fill = TRUE;
   self->y_fill = TRUE;
-
-  self->has_last_allocation = FALSE;
 }
 
 static GType
@@ -708,29 +664,35 @@ clutter_table_layout_set_container (ClutterLayoutManager *layout,
 
 static void
 update_row_col (ClutterTableLayout *layout,
-                ClutterContainer *container)
+                ClutterContainer   *container)
 {
   ClutterTableLayoutPrivate *priv = layout->priv;
   ClutterLayoutManager *manager = CLUTTER_LAYOUT_MANAGER (layout);
-  GList *children, *l;
+  ClutterActor *actor, *child;
   gint n_cols, n_rows;
 
   n_cols = n_rows = 0;
-  children = container ? clutter_container_get_children (container) : NULL;
 
-  for (l = children; l; l = g_list_next (l))
+  if (container == NULL)
+    goto out;
+
+  actor = CLUTTER_ACTOR (container);
+  for (child = clutter_actor_get_first_child (actor);
+       child != NULL;
+       child = clutter_actor_get_next_sibling (child))
     {
-      ClutterActor *child = l->data;
       ClutterTableChild *meta;
 
-      meta = CLUTTER_TABLE_CHILD (clutter_layout_manager_get_child_meta (manager, container, child));
+      meta =
+        CLUTTER_TABLE_CHILD (clutter_layout_manager_get_child_meta (manager,
+                                                                    container,
+                                                                    child));
 
       n_cols = MAX (n_cols, meta->col + meta->col_span);
       n_rows = MAX (n_rows, meta->row + meta->row_span);
     }
 
-  g_list_free (children);
-
+out:
   priv->n_cols = n_cols;
   priv->n_rows = n_rows;
 
@@ -743,26 +705,31 @@ calculate_col_widths (ClutterTableLayout *self,
 {
   ClutterTableLayoutPrivate *priv = self->priv;
   ClutterLayoutManager *manager = CLUTTER_LAYOUT_MANAGER (self);
+  ClutterActor *actor, *child;
   gint i;
   DimensionData *columns;
-  GList *l, *children;
+  ClutterOrientation orientation = CLUTTER_ORIENTATION_HORIZONTAL;
 
   update_row_col (self, container);
   g_array_set_size (priv->columns, 0);
   g_array_set_size (priv->columns, priv->n_cols);
-  columns = (DimensionData *) priv->columns->data;
+  columns = (DimensionData *) (void *) priv->columns->data;
 
   /* reset the visibility of all columns */
   priv->visible_cols = 0;
   for (i = 0; i < priv->n_cols; i++)
-    columns[i].visible = FALSE;
+    {
+      columns[i].expand = FALSE;
+      columns[i].visible = FALSE;
+    }
 
-  children = clutter_container_get_children (container);
+  actor = CLUTTER_ACTOR (container);
 
   /* STAGE ONE: calculate column widths for non-spanned children */
-  for (l = children; l; l = g_list_next (l))
+  for (child = clutter_actor_get_first_child (actor);
+       child != NULL;
+       child = clutter_actor_get_next_sibling (child))
     {
-      ClutterActor *child = l->data;
       ClutterTableChild *meta;
       DimensionData *col;
       gfloat c_min, c_pref;
@@ -770,8 +737,10 @@ calculate_col_widths (ClutterTableLayout *self,
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
         continue;
 
-      meta = (ClutterTableChild *)
-        clutter_layout_manager_get_child_meta (manager, container, child);
+      meta =
+        CLUTTER_TABLE_CHILD (clutter_layout_manager_get_child_meta (manager,
+                                                                    container,
+                                                                    child));
 
       if (meta->col_span > 1)
         continue;
@@ -788,15 +757,20 @@ calculate_col_widths (ClutterTableLayout *self,
 
       col->min_size = MAX (col->min_size, c_min);
       col->pref_size = MAX (col->pref_size, c_pref);
-      col->expand = MAX (col->expand, meta->x_expand);
+
+      if (!col->expand)
+        {
+          col->expand = clutter_actor_needs_expand (child, orientation) ||
+            meta->x_expand;
+        }
     }
 
   /* STAGE TWO: take spanning children into account */
-  for (l = children; l; l = g_list_next (l))
+  for (child = clutter_actor_get_first_child (actor);
+       child != NULL;
+       child = clutter_actor_get_next_sibling (child))
     {
-      ClutterActor *child = l->data;
       ClutterTableChild *meta;
-      DimensionData *col;
       gfloat c_min, c_pref;
       gfloat min_width, pref_width;
       gint start_col, end_col;
@@ -805,13 +779,14 @@ calculate_col_widths (ClutterTableLayout *self,
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
         continue;
 
-      meta = (ClutterTableChild *)
-        clutter_layout_manager_get_child_meta (manager, container, child);
+      meta =
+        CLUTTER_TABLE_CHILD (clutter_layout_manager_get_child_meta (manager,
+                                                                    container,
+                                                                    child));
 
       if (meta->col_span < 2)
         continue;
 
-      col = &columns[meta->col];
       start_col = meta->col;
       end_col = meta->col + meta->col_span - 1;
 
@@ -829,10 +804,17 @@ calculate_col_widths (ClutterTableLayout *self,
           if (columns[i].expand)
             n_expand++;
 
-          if (!col->visible)
+          if (!columns[i].visible)
             {
-              col->visible = TRUE;
+              columns[i].visible = TRUE;
               priv->visible_cols += 1;
+            }
+
+          if (!columns[i].expand)
+            {
+              columns[i].expand = clutter_actor_needs_expand (child,
+                                                              orientation) ||
+                meta->x_expand;
             }
         }
       min_width += priv->col_spacing * (meta->col_span - 1);
@@ -887,10 +869,7 @@ calculate_col_widths (ClutterTableLayout *self,
                 }
             }
         }
-
-
     }
-  g_list_free (children);
 
   /* calculate final widths */
   if (for_width >= 0)
@@ -901,6 +880,7 @@ calculate_col_widths (ClutterTableLayout *self,
       min_width = 0;
       pref_width = 0;
       n_expand = 0;
+
       for (i = 0; i < self->priv->n_cols; i++)
         {
           pref_width += columns[i].pref_size;
@@ -908,6 +888,7 @@ calculate_col_widths (ClutterTableLayout *self,
           if (columns[i].expand)
             n_expand++;
         }
+
       pref_width += priv->col_spacing * (priv->n_cols - 1);
       min_width += priv->col_spacing * (priv->n_cols - 1);
 
@@ -972,12 +953,8 @@ calculate_col_widths (ClutterTableLayout *self,
             {
               if (columns[i].expand)
                 {
-                  if (n_expand)
-                    columns[i].final_size = columns[i].pref_size
-                                          + (extra_width / n_expand);
-                  else
-                    columns[i].final_size = columns[i].pref_size
-                                          + (extra_width / priv->n_cols);
+                  columns[i].final_size = columns[i].pref_size
+                                        + (extra_width / n_expand);
                 }
               else
                 columns[i].final_size = columns[i].pref_size;
@@ -1003,27 +980,33 @@ calculate_row_heights (ClutterTableLayout *self,
 {
   ClutterTableLayoutPrivate *priv = self->priv;
   ClutterLayoutManager *manager = CLUTTER_LAYOUT_MANAGER (self);
-  GList *l, *children;
+  ClutterActor *actor, *child;
   gint i;
   DimensionData *rows, *columns;
+  ClutterOrientation orientation = CLUTTER_ORIENTATION_VERTICAL;
 
   update_row_col (self, container);
   g_array_set_size (priv->rows, 0);
   g_array_set_size (priv->rows, self->priv->n_rows);
 
-  rows = (DimensionData*) priv->rows->data;
-  columns = (DimensionData*) priv->columns->data;
+  rows = (DimensionData *) (void *) priv->rows->data;
+  columns = (DimensionData *) (void *) priv->columns->data;
 
   /* reset the visibility of all rows */
   priv->visible_rows = 0;
   for (i = 0; i < priv->n_rows; i++)
-    rows[i].visible = FALSE;
-
-  children = clutter_container_get_children (container);
-  /* STAGE ONE: calculate row heights for non-spanned children */
-  for (l = children; l; l = g_list_next (l))
     {
-      ClutterActor *child = l->data;
+      rows[i].expand = FALSE;
+      rows[i].visible = FALSE;
+    }
+
+  actor = CLUTTER_ACTOR (container);
+
+  /* STAGE ONE: calculate row heights for non-spanned children */
+  for (child = clutter_actor_get_first_child (actor);
+       child != NULL;
+       child = clutter_actor_get_next_sibling (child))
+    {
       ClutterTableChild *meta;
       DimensionData *row;
       gfloat c_min, c_pref;
@@ -1031,8 +1014,10 @@ calculate_row_heights (ClutterTableLayout *self,
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
         continue;
 
-      meta = (ClutterTableChild *)
-        clutter_layout_manager_get_child_meta (manager, container, child);
+      meta =
+        CLUTTER_TABLE_CHILD (clutter_layout_manager_get_child_meta (manager,
+                                                                    container,
+                                                                    child));
 
       if (meta->row_span > 1)
         continue;
@@ -1050,15 +1035,19 @@ calculate_row_heights (ClutterTableLayout *self,
 
       row->min_size = MAX (row->min_size, c_min);
       row->pref_size = MAX (row->pref_size, c_pref);
-      row->expand = MAX (row->expand, meta->y_expand);
+
+      if (!row->expand)
+        {
+          row->expand = clutter_actor_needs_expand (child, orientation) ||
+            meta->y_expand;
+        }
     }
 
-
-
   /* STAGE TWO: take spanning children into account */
-  for (l = children; l; l = g_list_next (l))
+  for (child = clutter_actor_get_first_child (actor);
+       child != NULL;
+       child = clutter_actor_get_next_sibling (child))
     {
-      ClutterActor *child = l->data;
       ClutterTableChild *meta;
       gfloat c_min, c_pref;
       gfloat min_height, pref_height;
@@ -1068,8 +1057,10 @@ calculate_row_heights (ClutterTableLayout *self,
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
         continue;
 
-      meta = (ClutterTableChild *)
-        clutter_layout_manager_get_child_meta (manager, container, child);
+      meta =
+        CLUTTER_TABLE_CHILD (clutter_layout_manager_get_child_meta (manager,
+                                                                    container,
+                                                                    child));
 
       if (meta->row_span < 2)
         continue;
@@ -1097,6 +1088,12 @@ calculate_row_heights (ClutterTableLayout *self,
             {
               rows[i].visible = TRUE;
               priv->visible_rows += 1;
+            }
+
+          if (!rows[i].expand)
+            {
+              rows[i].expand = clutter_actor_needs_expand (child, orientation) ||
+                meta->y_expand;
             }
         }
 
@@ -1162,10 +1159,7 @@ calculate_row_heights (ClutterTableLayout *self,
                 }
             }
         }
-
     }
-
-  g_list_free (children);
 
   /* calculate final heights */
   if (for_height >= 0)
@@ -1176,6 +1170,7 @@ calculate_row_heights (ClutterTableLayout *self,
       min_height = 0;
       pref_height = 0;
       n_expand = 0;
+
       for (i = 0; i < self->priv->n_rows; i++)
         {
           pref_height += rows[i].pref_size;
@@ -1183,6 +1178,7 @@ calculate_row_heights (ClutterTableLayout *self,
           if (rows[i].expand)
             n_expand++;
         }
+
       pref_height += priv->row_spacing * (priv->n_rows - 1);
       min_height += priv->row_spacing * (priv->n_rows - 1);
 
@@ -1247,12 +1243,8 @@ calculate_row_heights (ClutterTableLayout *self,
             {
               if (rows[i].expand)
                 {
-                  if (n_expand)
-                    rows[i].final_size = rows[i].pref_size
-                                       + (extra_height / n_expand);
-                  else
-                    rows[i].final_size = rows[i].pref_size
-                                       + (extra_height / priv->n_rows);
+                  rows[i].final_size = rows[i].pref_size
+                                     + (extra_height / n_expand);
                 }
               else
                 rows[i].final_size = rows[i].pref_size;
@@ -1303,7 +1295,7 @@ clutter_table_layout_get_preferred_width (ClutterLayoutManager *layout,
     }
 
   calculate_table_dimensions (self, container, -1, for_height);
-  columns = (DimensionData *) priv->columns->data;
+  columns = (DimensionData *) (void *) priv->columns->data;
 
   total_min_width = (priv->visible_cols - 1) * (float) priv->col_spacing;
   total_pref_width = total_min_width;
@@ -1343,7 +1335,7 @@ clutter_table_layout_get_preferred_height (ClutterLayoutManager *layout,
     }
 
   calculate_table_dimensions (self, container, for_width, -1);
-  rows = (DimensionData *) priv->rows->data;
+  rows = (DimensionData *) (void *) priv->rows->data;
 
   total_min_height = (priv->visible_rows - 1) * (float) priv->row_spacing;
   total_pref_height = total_min_height;
@@ -1387,7 +1379,7 @@ clutter_table_layout_allocate (ClutterLayoutManager   *layout,
 {
   ClutterTableLayout *self = CLUTTER_TABLE_LAYOUT (layout);
   ClutterTableLayoutPrivate *priv = self->priv;
-  GList *list, *children;
+  ClutterActor *actor, *child;
   gint row_spacing, col_spacing;
   gint i;
   DimensionData *rows, *columns;
@@ -1396,8 +1388,9 @@ clutter_table_layout_allocate (ClutterLayoutManager   *layout,
   if (priv->n_cols < 1 || priv->n_rows < 1)
     return;
 
-  children = clutter_container_get_children (container);
-  if (children == NULL)
+  actor = CLUTTER_ACTOR (container);
+
+  if (clutter_actor_get_n_children (actor) == 0)
     return;
 
   col_spacing = (priv->col_spacing);
@@ -1407,12 +1400,13 @@ clutter_table_layout_allocate (ClutterLayoutManager   *layout,
                               box->x2 - box->x1,
                               box->y2 - box->y1);
 
-  rows = (DimensionData *) priv->rows->data;
-  columns = (DimensionData *) priv->columns->data;
+  rows = (DimensionData *) (void *) priv->rows->data;
+  columns = (DimensionData *) (void *) priv->columns->data;
 
-  for (list = children; list; list = g_list_next (list))
+  for (child = clutter_actor_get_first_child (actor);
+       child != NULL;
+       child = clutter_actor_get_next_sibling (child))
     {
-      ClutterActor *child = list->data;
       gint row, col, row_span, col_span;
       gint col_width, row_height;
       ClutterTableChild *meta;
@@ -1424,8 +1418,10 @@ clutter_table_layout_allocate (ClutterLayoutManager   *layout,
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
         continue;
 
-      meta = (ClutterTableChild *)
-        clutter_layout_manager_get_child_meta (layout, priv->container, child);
+      meta =
+        CLUTTER_TABLE_CHILD (clutter_layout_manager_get_child_meta (layout,
+                                                                    container,
+                                                                    child));
 
       /* get child properties */
       col = meta->col;
@@ -1502,95 +1498,25 @@ clutter_table_layout_allocate (ClutterLayoutManager   *layout,
       childbox.y1 = (float) child_y;
       childbox.y2 = (float) MAX (0, child_y + row_height);
 
-      clutter_actor_allocate_align_fill (child, &childbox,
-                                         x_align, y_align,
-                                         x_fill, y_fill,
-                                         flags);
-
-      /* since we call this after allocate_align_fill(), this is
-       * just a cheap copy
-       */
-      clutter_actor_get_allocation_box (child, &childbox);
-
-      if (priv->use_animations && priv->is_animating)
+      if (priv->use_animations)
         {
-          ClutterActorBox *start = NULL;
-          ClutterActorBox end = { 0, };
-          gdouble p;
-
-          p = clutter_layout_manager_get_animation_progress (layout);
-
-          if (!meta->has_last_allocation)
-            {
-              /* if there is no allocation available then the child has just
-               * been added to the container; we put it in the final state
-               * and store its allocation for later
-               */
-              meta->last_allocation = childbox;
-              meta->has_last_allocation = TRUE;
-
-              goto do_allocate;
-            }
-
-          start = &meta->last_allocation;
-          end = childbox;
-
-          /* interpolate between the initial and final values */
-          clutter_actor_box_interpolate (start, &end, p, &childbox);
-
-          CLUTTER_NOTE (ANIMATION,
-                        "Animate { %.1f, %.1f, %.1f, %.1f }\t"
-                        "%.3f * { %.1f, %.1f, %.1f, %.1f }\t"
-                        "-> { %.1f, %.1f, %.1f, %.1f }",
-                        start->x1, start->y1,
-                        start->x2, start->y2,
-                        p,
-                        childbox.x1, childbox.y1,
-                        childbox.x2, childbox.y2,
-                        end.x1, end.y1,
-                        end.x2, end.y2);
+          clutter_actor_save_easing_state (child);
+          clutter_actor_set_easing_mode (child, priv->easing_mode);
+          clutter_actor_set_easing_duration (child, priv->easing_duration);
         }
+
+      if (clutter_actor_needs_expand (child, CLUTTER_ORIENTATION_HORIZONTAL) ||
+          clutter_actor_needs_expand (child, CLUTTER_ORIENTATION_VERTICAL))
+        clutter_actor_allocate (child, &childbox, flags);
       else
-        {
-          /* store the allocation for later animations */
-          meta->last_allocation = childbox;
-          meta->has_last_allocation = TRUE;
-        }
+        clutter_actor_allocate_align_fill (child, &childbox,
+                                           x_align, y_align,
+                                           x_fill, y_fill,
+                                           flags);
 
-    do_allocate:
-      clutter_actor_allocate (child, &childbox, flags);
+      if (priv->use_animations)
+        clutter_actor_restore_easing_state (child);
     }
-
-  g_list_free (children);
-}
-
-static ClutterAlpha *
-clutter_table_layout_begin_animation (ClutterLayoutManager *manager,
-                                      guint                 duration,
-                                      gulong                easing)
-{
-  ClutterTableLayoutPrivate *priv = CLUTTER_TABLE_LAYOUT (manager)->priv;
-  ClutterLayoutManagerClass *parent_class;
-
-  priv->is_animating = TRUE;
-
-  /* we want the default implementation */
-  parent_class = CLUTTER_LAYOUT_MANAGER_CLASS (clutter_table_layout_parent_class);
-
-  return parent_class->begin_animation (manager, duration, easing);
-}
-
-static void
-clutter_table_layout_end_animation (ClutterLayoutManager *manager)
-{
-  ClutterTableLayoutPrivate *priv = CLUTTER_TABLE_LAYOUT (manager)->priv;
-  ClutterLayoutManagerClass *parent_class;
-
-  priv->is_animating = FALSE;
-
-  /* we want the default implementation */
-  parent_class = CLUTTER_LAYOUT_MANAGER_CLASS (clutter_table_layout_parent_class);
-  parent_class->end_animation (manager);
 }
 
 static void
@@ -1697,8 +1623,6 @@ clutter_table_layout_class_init (ClutterTableLayoutClass *klass)
   layout_class->set_container = clutter_table_layout_set_container;
   layout_class->get_child_meta_type =
     clutter_table_layout_get_child_meta_type;
-  layout_class->begin_animation = clutter_table_layout_begin_animation;
-  layout_class->end_animation = clutter_table_layout_end_animation;
 
   g_type_class_add_private (klass, sizeof (ClutterTableLayoutPrivate));
 
@@ -1734,9 +1658,18 @@ clutter_table_layout_class_init (ClutterTableLayoutClass *klass)
    * ClutterTableLayout:use-animations:
    *
    * Whether the #ClutterTableLayout should animate changes in the
-   * layout properties
+   * layout properties.
+   *
+   * By default, #ClutterTableLayout will honour the easing state of
+   * the children when allocating them. Setting this property to
+   * %TRUE will override the easing state with the layout manager's
+   * #ClutterTableLayout:easing-mode and #ClutterTableLayout:easing-duration
+   * properties.
    *
    * Since: 1.4
+   *
+   * Deprecated: 1.12: #ClutterTableLayout will honour the easing state
+   *   of the children when allocating them
    */
   pspec = g_param_spec_boolean ("use-animations",
                                 P_("Use Animations"),
@@ -1749,16 +1682,19 @@ clutter_table_layout_class_init (ClutterTableLayoutClass *klass)
    * ClutterTableLayout:easing-mode:
    *
    * The easing mode for the animations, in case
-   * #ClutterTableLayout:use-animations is set to %TRUE
+   * #ClutterTableLayout:use-animations is set to %TRUE.
    *
    * The easing mode has the same semantics of #ClutterAnimation:mode: it can
    * either be a value from the #ClutterAnimationMode enumeration, like
    * %CLUTTER_EASE_OUT_CUBIC, or a logical id as returned by
-   * clutter_alpha_register_func()
+   * clutter_alpha_register_func().
    *
-   * The default value is %CLUTTER_EASE_OUT_CUBIC
+   * The default value is %CLUTTER_EASE_OUT_CUBIC.
    *
    * Since: 1.4
+   *
+   * Deprecated: 1.12: #ClutterTableLayout will honour the easing state
+   *   of the children when allocating them
    */
   pspec = g_param_spec_ulong ("easing-mode",
                               P_("Easing Mode"),
@@ -1772,11 +1708,14 @@ clutter_table_layout_class_init (ClutterTableLayoutClass *klass)
    * ClutterTableLayout:easing-duration:
    *
    * The duration of the animations, in case #ClutterTableLayout:use-animations
-   * is set to %TRUE
+   * is set to %TRUE.
    *
-   * The duration is expressed in milliseconds
+   * The duration is expressed in milliseconds.
    *
    * Since: 1.4
+   *
+   * Deprecated: 1.12: #ClutterTableLayout will honour the easing state
+   *   of the children when allocating them
    */
   pspec = g_param_spec_uint ("easing-duration",
                              P_("Easing Duration"),
@@ -1846,15 +1785,7 @@ clutter_table_layout_set_column_spacing (ClutterTableLayout *layout,
       priv->col_spacing = spacing;
 
       manager = CLUTTER_LAYOUT_MANAGER (layout);
-
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (manager,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (manager);
+      clutter_layout_manager_layout_changed (manager);
 
       g_object_notify (G_OBJECT (layout), "column-spacing");
     }
@@ -1904,15 +1835,7 @@ clutter_table_layout_set_row_spacing (ClutterTableLayout *layout,
       priv->row_spacing = spacing;
 
       manager = CLUTTER_LAYOUT_MANAGER (layout);
-
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (manager,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (manager);
+      clutter_layout_manager_layout_changed (manager);
 
       g_object_notify (G_OBJECT (layout), "row-spacing");
     }
@@ -1982,10 +1905,10 @@ clutter_table_layout_pack (ClutterTableLayout  *layout,
   g_assert (CLUTTER_IS_TABLE_CHILD (meta));
 
   if (row < 0)
-    row = priv->n_rows + 1;
+    row = priv->n_rows;
 
   if (column < 0)
-    column = priv->n_cols + 1;
+    column = priv->n_cols;
 
   table_child_set_position (CLUTTER_TABLE_CHILD (meta), column, row);
 }
@@ -2113,6 +2036,9 @@ clutter_table_layout_get_span (ClutterTableLayout *layout,
  * inside @layout
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: Use clutter_actor_set_x_align() and
+ *   clutter_actor_set_y_align() instead.
  */
 void
 clutter_table_layout_set_alignment (ClutterTableLayout    *layout,
@@ -2168,6 +2094,9 @@ clutter_table_layout_set_alignment (ClutterTableLayout    *layout,
  * clutter_table_layout_set_alignment().
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: Use clutter_actor_get_x_align() and
+ *   clutter_actor_get_y_align() instead.
  */
 void
 clutter_table_layout_get_alignment (ClutterTableLayout    *layout,
@@ -2226,6 +2155,9 @@ clutter_table_layout_get_alignment (ClutterTableLayout    *layout,
  * inside @layout
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: Use clutter_actor_set_x_align() and
+ *   clutter_actor_set_y_align() instead.
  */
 void
 clutter_table_layout_set_fill (ClutterTableLayout *layout,
@@ -2280,6 +2212,9 @@ clutter_table_layout_set_fill (ClutterTableLayout *layout,
  * as set using clutter_table_layout_pack() or clutter_table_layout_set_fill()
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: Use clutter_actor_get_x_align() and
+ *   clutter_actor_get_y_align() instead.
  */
 void
 clutter_table_layout_get_fill (ClutterTableLayout *layout,
@@ -2339,6 +2274,9 @@ clutter_table_layout_get_fill (ClutterTableLayout *layout,
  * inside @layout
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: Use clutter_actor_set_x_expand() or
+ *   clutter_actor_set_y_expand() instead.
  */
 void
 clutter_table_layout_set_expand (ClutterTableLayout *layout,
@@ -2393,6 +2331,9 @@ clutter_table_layout_set_expand (ClutterTableLayout *layout,
  * as set using clutter_table_layout_pack() or clutter_table_layout_set_expand()
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: Use clutter_actor_get_x_expand() and
+ *   clutter_actor_get_y_expand() instead.
  */
 void
 clutter_table_layout_get_expand (ClutterTableLayout *layout,
@@ -2452,6 +2393,9 @@ clutter_table_layout_get_expand (ClutterTableLayout *layout,
  * by the animations is controlled by clutter_table_layout_set_easing_mode()
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: #ClutterTableLayout will honour the easing state
+ *   of the children when allocating them
  */
 void
 clutter_table_layout_set_use_animations (ClutterTableLayout *layout,
@@ -2483,6 +2427,8 @@ clutter_table_layout_set_use_animations (ClutterTableLayout *layout,
  * Return value: %TRUE if the animations should be used, %FALSE otherwise
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12
  */
 gboolean
 clutter_table_layout_get_use_animations (ClutterTableLayout *layout)
@@ -2505,6 +2451,9 @@ clutter_table_layout_get_use_animations (ClutterTableLayout *layout)
  * animations
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: #ClutterTableLayout will honour the easing state
+ *   of the children when allocating them
  */
 void
 clutter_table_layout_set_easing_mode (ClutterTableLayout *layout,
@@ -2533,6 +2482,9 @@ clutter_table_layout_set_easing_mode (ClutterTableLayout *layout,
  * Return value: an easing mode
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: #ClutterTableLayout will honour the easing state
+ *   of the children when allocating them
  */
 gulong
 clutter_table_layout_get_easing_mode (ClutterTableLayout *layout)
@@ -2555,6 +2507,9 @@ clutter_table_layout_get_easing_mode (ClutterTableLayout *layout)
  * animations
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12: #ClutterTableLayout will honour the easing state
+ *   of the children when allocating them
  */
 void
 clutter_table_layout_set_easing_duration (ClutterTableLayout *layout,
@@ -2583,6 +2538,8 @@ clutter_table_layout_set_easing_duration (ClutterTableLayout *layout,
  * Return value: the duration of the animations, in milliseconds
  *
  * Since: 1.4
+ *
+ * Deprecated: 1.12
  */
 guint
 clutter_table_layout_get_easing_duration (ClutterTableLayout *layout)

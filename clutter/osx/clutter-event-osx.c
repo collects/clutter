@@ -38,8 +38,6 @@
 #include "clutter-private.h"
 #include "clutter-stage-private.h"
 
-#include "clutter-event-loop-osx.h"
-
 #define WHEEL_DELTA 1
 
 /*************************************************************************/
@@ -308,14 +306,19 @@ clutter_event_osx_translate (NSEvent *nsevent,
                              ClutterEvent *event)
 {
   ClutterDeviceManagerOSX *manager_osx;
+  ClutterDeviceManager *manager;
   ClutterStageOSX *stage_osx;
   ClutterStageWindow *impl;
   ClutterStage *stage;
 
-  stage       = event->any.stage;
-  impl        = _clutter_stage_get_window (event->any.stage);
-  stage_osx   = CLUTTER_STAGE_OSX (impl);
-  manager_osx = CLUTTER_DEVICE_MANAGER_OSX (clutter_device_manager_get_default ());
+  manager = clutter_device_manager_get_default ();
+  if (manager == NULL)
+    return FALSE;
+
+  stage = event->any.stage;
+  impl = _clutter_stage_get_window (event->any.stage);
+  stage_osx = CLUTTER_STAGE_OSX (impl);
+  manager_osx = CLUTTER_DEVICE_MANAGER_OSX (manager);
 
   event->any.time = [nsevent clutterTime];
 
@@ -368,7 +371,7 @@ clutter_event_osx_translate (NSEvent *nsevent,
       event->crossing.source = CLUTTER_ACTOR (stage);
       clutter_event_set_device (event, manager_osx->core_pointer);
 
-      _clutter_stage_add_device (stage, manager_osx->core_pointer);
+      _clutter_input_device_set_stage (manager_osx->core_pointer, stage);
 
       CLUTTER_NOTE (EVENT, "enter at %f,%f",
                     event->crossing.x, event->crossing.y);
@@ -382,7 +385,7 @@ clutter_event_osx_translate (NSEvent *nsevent,
       event->crossing.source = CLUTTER_ACTOR (stage);
       clutter_event_set_device (event, manager_osx->core_pointer);
 
-      _clutter_stage_remove_device (stage, manager_osx->core_pointer);
+      _clutter_input_device_set_stage (manager_osx->core_pointer, NULL);
 
       CLUTTER_NOTE (EVENT, "exit at %f,%f",
                     event->crossing.x, event->crossing.y);
@@ -490,16 +493,4 @@ _clutter_event_osx_put (NSEvent      *nsevent,
     }
   else
     clutter_event_free (event);
-}
-
-void
-_clutter_events_osx_init (void)
-{
-  _clutter_osx_event_loop_init ();
-}
-
-void
-_clutter_events_osx_uninit (void)
-{
-  g_assert_not_reached ();
 }

@@ -97,8 +97,9 @@ translate_class_info (ClutterInputDevice *device,
             n_keys = xk_info->max_keycode - xk_info->min_keycode + 1;
 
             _clutter_input_device_set_n_keys (device, n_keys);
-            device_x11->min_keycode = xk_info->min_keycode;
-            device_x11->max_keycode = xk_info->max_keycode;
+            _clutter_input_device_x11_set_keycodes (device_x11,
+                                                    xk_info->min_keycode,
+                                                    xk_info->max_keycode);
           }
           break;
 
@@ -255,8 +256,8 @@ translate_key_event (ClutterBackendX11       *backend_x11,
   if (n != NoSymbol)
     {
       event->key.unicode_value = g_utf8_get_char_validated (buffer, n);
-      if ((event->key.unicode_value != -1) &&
-          (event->key.unicode_value != -2))
+      if ((event->key.unicode_value != (gunichar) -1) &&
+          (event->key.unicode_value != (gunichar) -2))
         goto out;
     }
   else
@@ -487,7 +488,7 @@ clutter_device_manager_x11_translate_event (ClutterEventTranslator *translator,
       event->crossing.related = NULL;
       clutter_event_set_device (event, manager_x11->core_pointer);
 
-      _clutter_stage_add_device (stage, manager_x11->core_pointer);
+      _clutter_input_device_set_stage (manager_x11->core_pointer, stage);
 
       res = CLUTTER_TRANSLATE_QUEUE;
       break;
@@ -513,7 +514,7 @@ clutter_device_manager_x11_translate_event (ClutterEventTranslator *translator,
       event->crossing.related = NULL;
       clutter_event_set_device (event, manager_x11->core_pointer);
 
-      _clutter_stage_remove_device (stage, manager_x11->core_pointer);
+      _clutter_input_device_set_stage (manager_x11->core_pointer, NULL);
 
       res = CLUTTER_TRANSLATE_QUEUE;
       break;
@@ -588,7 +589,7 @@ default_device:
    * cover core devices
    */
   manager_x11->core_pointer =
-    g_object_new (CLUTTER_TYPE_INPUT_DEVICE,
+    g_object_new (CLUTTER_TYPE_INPUT_DEVICE_X11,
                   "name", "Core Pointer",
                   "has-cursor", TRUE,
                   "device-type", CLUTTER_POINTER_DEVICE,
@@ -600,7 +601,7 @@ default_device:
   CLUTTER_NOTE (BACKEND, "Added core pointer device");
 
   manager_x11->core_keyboard =
-    g_object_new (CLUTTER_TYPE_INPUT_DEVICE,
+    g_object_new (CLUTTER_TYPE_INPUT_DEVICE_X11,
                   "name", "Core Keyboard",
                   "has-cursor", FALSE,
                   "device-type", CLUTTER_KEYBOARD_DEVICE,

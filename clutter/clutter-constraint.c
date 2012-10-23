@@ -11,7 +11,7 @@
  * the position or size of the #ClutterActor to which it is applied, by
  * updating the actor's allocation. Each #ClutterConstraint can change the
  * allocation of the actor to which they are applied by overriding the
- * <function>update_allocation()</function> virtual function.
+ * #ClutterConstraintClass.update_allocation() virtual function.
  *
  * <refsect2 id="ClutterConstraint-usage">
  *   <title>Using Constraints</title>
@@ -91,7 +91,9 @@
  *       <graphic fileref="constraints-example.png" format="PNG"/>
  *     </figure>
  *     <programlisting>
- *<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="../../../../tests/interactive/test-snap-constraint.c" parse="text"><xi:fallback>FIXME: MISSING XINCLUDE CONTENT</xi:fallback></xi:include>
+ *<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="../../../../examples/constraints.c" parse="text">
+ *  <xi:fallback>FIXME: MISSING XINCLUDE CONTENT</xi:fallback>
+ *</xi:include>
  *     </programlisting>
  *     <para>You can try resizing interactively the #ClutterStage and verify
  *     that the three #ClutterActor<!-- -->s maintain the same position and
@@ -143,6 +145,7 @@
 
 #include "clutter-actor.h"
 #include "clutter-actor-meta-private.h"
+#include "clutter-private.h"
 
 G_DEFINE_ABSTRACT_TYPE (ClutterConstraint,
                         clutter_constraint,

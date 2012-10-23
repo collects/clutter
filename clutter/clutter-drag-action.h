@@ -66,6 +66,7 @@ struct _ClutterDragAction
  * @drag_begin: class handler of the #ClutterDragAction::drag-begin signal
  * @drag_motion: class handler of the #ClutterDragAction::drag-motion signal
  * @drag_end: class handler of the #ClutterDragAction::drag-end signal
+ * @drag_progress: class handler of the #ClutterDragAction::drag-progress signal
  *
  * The <structname>ClutterDragActionClass</structname> structure contains
  * only private data
@@ -78,27 +79,30 @@ struct _ClutterDragActionClass
   ClutterActionClass parent_class;
 
   /*< public >*/
-  void (* drag_begin)  (ClutterDragAction   *action,
-                        ClutterActor        *actor,
-                        gfloat               event_x,
-                        gfloat               event_y,
-                        ClutterModifierType  modifiers);
-  void (* drag_motion) (ClutterDragAction   *action,
-                        ClutterActor        *actor,
-                        gfloat               delta_x,
-                        gfloat               delta_y);
-  void (* drag_end)    (ClutterDragAction   *action,
-                        ClutterActor        *actor,
-                        gfloat               event_x,
-                        gfloat               event_y,
-                        ClutterModifierType  modifiers);
+  void          (* drag_begin)          (ClutterDragAction   *action,
+                                         ClutterActor        *actor,
+                                         gfloat               event_x,
+                                         gfloat               event_y,
+                                         ClutterModifierType  modifiers);
+  void          (* drag_motion)         (ClutterDragAction   *action,
+                                         ClutterActor        *actor,
+                                         gfloat               delta_x,
+                                         gfloat               delta_y);
+  void          (* drag_end)            (ClutterDragAction   *action,
+                                         ClutterActor        *actor,
+                                         gfloat               event_x,
+                                         gfloat               event_y,
+                                         ClutterModifierType  modifiers);
+  gboolean      (* drag_progress)       (ClutterDragAction   *action,
+                                         ClutterActor        *actor,
+                                         gfloat               delta_x,
+                                         gfloat               delta_y);
 
   /*< private >*/
   void (* _clutter_drag_action1) (void);
   void (* _clutter_drag_action2) (void);
   void (* _clutter_drag_action3) (void);
   void (* _clutter_drag_action4) (void);
-  void (* _clutter_drag_action5) (void);
 };
 
 GType clutter_drag_action_get_type (void) G_GNUC_CONST;
@@ -124,6 +128,14 @@ void            clutter_drag_action_get_press_coords   (ClutterDragAction *actio
 void            clutter_drag_action_get_motion_coords  (ClutterDragAction *action,
                                                         gfloat            *motion_x,
                                                         gfloat            *motion_y);
+
+CLUTTER_AVAILABLE_IN_1_12
+gboolean        clutter_drag_action_get_drag_area      (ClutterDragAction *action,
+                                                        ClutterRect       *drag_area);
+
+CLUTTER_AVAILABLE_IN_1_12
+void            clutter_drag_action_set_drag_area      (ClutterDragAction *action,
+                                                        const ClutterRect *drag_area);
 
 G_END_DECLS
 

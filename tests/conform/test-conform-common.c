@@ -3,7 +3,7 @@
 #include <clutter/clutter.h>
 #include <stdlib.h>
 
-#ifdef COGL_HAS_XLIB
+#ifdef CLUTTER_WINDOWING_X11
 #include <X11/Xlib.h>
 #include <clutter/x11/clutter-x11.h>
 #endif
@@ -31,7 +31,7 @@ test_conform_simple_fixture_setup (TestConformSimpleFixture *fixture,
                 "$ make test-report");
   counter++;
 
-#ifdef HAVE_CLUTTER_GLX
+#ifdef CLUTTER_WINDOWING_X11
   {
     /* on X11 we need a display connection to run the test suite */
     const gchar *display = g_getenv ("DISPLAY");
@@ -42,13 +42,16 @@ test_conform_simple_fixture_setup (TestConformSimpleFixture *fixture,
 
         exit (EXIT_SUCCESS);
       }
+
+      /* enable XInput support */
+      clutter_x11_enable_xinput ();
   }
 #endif
 
   g_assert (clutter_init (shared_state->argc_addr, shared_state->argv_addr)
             == CLUTTER_INIT_SUCCESS);
 
-#ifdef COGL_HAS_XLIB
+#ifdef CLUTTER_WINDOWING_X11
   /* A lot of the tests depend on a specific stage / framebuffer size
    * when they read pixels back to verify the results of the test.
    *
@@ -57,7 +60,8 @@ test_conform_simple_fixture_setup (TestConformSimpleFixture *fixture,
    * later but since the tests are so short lived and may only render
    * a single frame this is not an acceptable semantic.
    */
-  XSynchronize (clutter_x11_get_default_display(), TRUE);
+  if (clutter_check_windowing_backend (CLUTTER_WINDOWING_X11))
+    XSynchronize (clutter_x11_get_default_display(), TRUE);
 #endif
 }
 

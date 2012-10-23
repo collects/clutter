@@ -108,7 +108,141 @@ typedef ClutterActorTraverseVisitFlags (*ClutterTraverseCallback) (ClutterActor 
 typedef gboolean (*ClutterForeachCallback) (ClutterActor *actor,
                                             gpointer      user_data);
 
-gint          _clutter_actor_get_n_children             (ClutterActor *self);
+typedef struct _AnchorCoord             AnchorCoord;
+typedef struct _SizeRequest             SizeRequest;
+
+typedef struct _ClutterLayoutInfo       ClutterLayoutInfo;
+typedef struct _ClutterTransformInfo    ClutterTransformInfo;
+typedef struct _ClutterAnimationInfo    ClutterAnimationInfo;
+
+/* Internal helper struct to represent a point that can be stored in
+   either direct pixel coordinates or as a fraction of the actor's
+   size. It is used for the anchor point, scale center and rotation
+   centers. */
+struct _AnchorCoord
+{
+  gboolean is_fractional;
+
+  union
+  {
+    /* Used when is_fractional == TRUE */
+    struct
+    {
+      gdouble x;
+      gdouble y;
+    } fraction;
+
+    /* Use when is_fractional == FALSE */
+    ClutterVertex units;
+  } v;
+};
+
+struct _SizeRequest
+{
+  guint  age;
+  gfloat for_size;
+  gfloat min_size;
+  gfloat natural_size;
+};
+
+/*< private >
+ * ClutterLayoutInfo:
+ * @fixed_pos: the fixed position of the actor
+ * @margin: the composed margin of the actor
+ * @x_align: the horizontal alignment, if the actor expands horizontally
+ * @y_align: the vertical alignment, if the actor expands vertically
+ * @x_expand: whether the actor should expand horizontally
+ * @y_expand: whether the actor should expand vertically
+ * @minimum: the fixed minimum size
+ * @natural: the fixed natural size
+ *
+ * Ancillary layout information for an actor.
+ */
+struct _ClutterLayoutInfo
+{
+  /* fixed position coordinates */
+  ClutterPoint fixed_pos;
+
+  ClutterMargin margin;
+
+  guint x_align : 4;
+  guint y_align : 4;
+
+  guint x_expand : 1;
+  guint y_expand : 1;
+
+  ClutterSize minimum;
+  ClutterSize natural;
+};
+
+const ClutterLayoutInfo *       _clutter_actor_get_layout_info_or_defaults      (ClutterActor *self);
+ClutterLayoutInfo *             _clutter_actor_get_layout_info                  (ClutterActor *self);
+ClutterLayoutInfo *             _clutter_actor_peek_layout_info                 (ClutterActor *self);
+
+struct _ClutterTransformInfo
+{
+  /* rotation (angle and center) */
+  gdouble rx_angle;
+  AnchorCoord rx_center;
+
+  gdouble ry_angle;
+  AnchorCoord ry_center;
+
+  gdouble rz_angle;
+  AnchorCoord rz_center;
+
+  /* scaling */
+  gdouble scale_x;
+  gdouble scale_y;
+  gdouble scale_z;
+  AnchorCoord scale_center;
+
+  /* anchor point */
+  AnchorCoord anchor;
+
+  /* translation */
+  ClutterVertex translation;
+
+  /* z_position */
+  gfloat z_position;
+
+  /* transformation center */
+  ClutterPoint pivot;
+  gfloat pivot_z;
+
+  CoglMatrix transform;
+  guint transform_set : 1;
+
+  CoglMatrix child_transform;
+  guint child_transform_set : 1;
+};
+
+const ClutterTransformInfo *    _clutter_actor_get_transform_info_or_defaults   (ClutterActor *self);
+ClutterTransformInfo *          _clutter_actor_get_transform_info               (ClutterActor *self);
+
+typedef struct _AState {
+  guint easing_duration;
+  guint easing_delay;
+  ClutterAnimationMode easing_mode;
+} AState;
+
+struct _ClutterAnimationInfo
+{
+  GArray *states;
+  AState *cur_state;
+
+  GHashTable *transitions;
+};
+
+const ClutterAnimationInfo *    _clutter_actor_get_animation_info_or_defaults   (ClutterActor *self);
+ClutterAnimationInfo *          _clutter_actor_get_animation_info               (ClutterActor *self);
+
+ClutterTransition *             _clutter_actor_create_transition                (ClutterActor *self,
+                                                                                 GParamSpec   *pspec,
+                                                                                 ...);
+ClutterTransition *             _clutter_actor_get_transition                   (ClutterActor *self,
+                                                                                 GParamSpec   *pspec);
+
 gboolean      _clutter_actor_foreach_child              (ClutterActor *self,
                                                          ClutterForeachCallback callback,
                                                          gpointer user_data);
@@ -168,6 +302,15 @@ void _clutter_actor_push_clone_paint (void);
 void _clutter_actor_pop_clone_paint  (void);
 
 guint32 _clutter_actor_get_pick_id (ClutterActor *self);
+
+void    _clutter_actor_shader_pre_paint         (ClutterActor *actor,
+                                                 gboolean      repeat);
+void    _clutter_actor_shader_post_paint        (ClutterActor *actor);
+
+ClutterActorAlign       _clutter_actor_get_effective_x_align    (ClutterActor *self);
+
+void            _clutter_actor_handle_event             (ClutterActor       *actor,
+                                                         const ClutterEvent *event);
 
 G_END_DECLS
 

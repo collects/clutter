@@ -52,7 +52,7 @@
  * <example id="drop-action-example">
  *   <title>Drop targets</title>
  *   <programlisting>
- * <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" parse="text" href="../../../../tests/interactive/test-drop.c">
+ * <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" parse="text" href="../../../../examples/drop-action.c">
  *   <xi:fallback>FIXME: MISSING XINCLUDE CONTENT</xi:fallback>
  * </xi:include>
  *   </programlisting>
@@ -101,6 +101,7 @@ enum
   OVER_IN,
   OVER_OUT,
   DROP,
+  DROP_CANCEL,
 
   LAST_SIGNAL
 };
@@ -126,24 +127,40 @@ on_stage_capture (ClutterStage *stage,
 {
   DropTarget *data = user_data;
   gfloat event_x, event_y;
-  ClutterInputDevice *device;
   ClutterActor *actor, *drag_actor;
   ClutterDropAction *drop_action;
   gboolean was_reactive;
 
-  if (!(clutter_event_type (event) == CLUTTER_MOTION ||
-        clutter_event_type (event) == CLUTTER_BUTTON_RELEASE))
-    return FALSE;
+  switch (clutter_event_type (event))
+    {
+    case CLUTTER_MOTION:
+    case CLUTTER_BUTTON_RELEASE:
+      {
+        ClutterInputDevice *device;
 
-  if (!(clutter_event_get_state (event) & CLUTTER_BUTTON1_MASK))
-    return FALSE;
+        if (!(clutter_event_get_state (event) & CLUTTER_BUTTON1_MASK))
+          return CLUTTER_EVENT_PROPAGATE;
+
+        device = clutter_event_get_device (event);
+        drag_actor = _clutter_stage_get_pointer_drag_actor (stage, device);
+        if (drag_actor == NULL)
+          return CLUTTER_EVENT_PROPAGATE;
+      }
+      break;
+
+    case CLUTTER_TOUCH_UPDATE:
+    case CLUTTER_TOUCH_END:
+      drag_actor = _clutter_stage_get_touch_drag_actor (stage,
+                                                        clutter_event_get_event_sequence (event));
+      if (drag_actor == NULL)
+        return CLUTTER_EVENT_PROPAGATE;
+      break;
+
+    default:
+      return CLUTTER_EVENT_PROPAGATE;
+    }
 
   clutter_event_get_coords (event, &event_x, &event_y);
-  device = clutter_event_get_device (event);
-
-  drag_actor = _clutter_stage_get_drag_actor (stage, device);
-  if (drag_actor == NULL)
-    return FALSE;
 
   /* get the actor under the cursor, excluding the dragged actor; we
    * use reactivity because it won't cause any scene invalidation
@@ -209,7 +226,8 @@ on_stage_capture (ClutterStage *stage,
     }
 
 out:
-  if (clutter_event_type (event) == CLUTTER_BUTTON_RELEASE)
+  if (clutter_event_type (event) == CLUTTER_BUTTON_RELEASE ||
+      clutter_event_type (event) == CLUTTER_TOUCH_END)
     {
       if (data->last_action != NULL)
         {
@@ -227,6 +245,13 @@ out:
                              clutter_actor_meta_get_actor (meta),
                              event_x, event_y);
             }
+	  else
+            {
+              g_signal_emit (data->last_action, drop_signals[DROP_CANCEL], 0,
+                             clutter_actor_meta_get_actor (meta),
+                             event_x, event_y);
+            }
+
         }
 
       data->last_action = NULL;
@@ -235,7 +260,7 @@ out:
   if (drag_actor != NULL)
     clutter_actor_set_reactive (drag_actor, was_reactive);
 
-  return FALSE;
+  return CLUTTER_EVENT_PROPAGATE;
 }
 
 static void
@@ -268,9 +293,11 @@ static void
 drop_action_unregister (ClutterDropAction *self)
 {
   ClutterDropActionPrivate *priv = self->priv;
-  DropTarget *data;
+  DropTarget *data = NULL;
 
-  data = g_object_get_data (G_OBJECT (priv->stage), "__clutter_drop_targets");
+  if (priv->stage != NULL)
+    data = g_object_get_data (G_OBJECT (priv->stage), "__clutter_drop_targets");
+
   if (data == NULL)
     return;
 
@@ -367,6 +394,8 @@ clutter_drop_action_class_init (ClutterDropActionClass *klass)
    * ClutterDropAction::can-drop:
    * @action: the #ClutterDropAction that emitted the signal
    * @actor: the #ClutterActor attached to the @action
+   * @event_x: the X coordinate (in stage space) of the drop event
+   * @event_y: the Y coordinate (in stage space) of the drop event
    *
    * The ::can-drop signal is emitted when the dragged actor is dropped
    * on @actor. The return value of the ::can-drop signal will determine
@@ -436,6 +465,8 @@ clutter_drop_action_class_init (ClutterDropActionClass *klass)
    * ClutterDropAction::drop:
    * @action: the #ClutterDropAction that emitted the signal
    * @actor: the #ClutterActor attached to the @action
+   * @event_x: the X coordinate (in stage space) of the drop event
+   * @event_y: the Y coordinate (in stage space) of the drop event
    *
    * The ::drop signal is emitted when the dragged actor is dropped
    * on @actor. This signal is only emitted if at least an handler of
@@ -445,6 +476,34 @@ clutter_drop_action_class_init (ClutterDropActionClass *klass)
    */
   drop_signals[DROP] =
     g_signal_new (I_("drop"),
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_LAST,
+                  G_STRUCT_OFFSET (ClutterDropActionClass, drop),
+                  NULL, NULL,
+                  _clutter_marshal_VOID__OBJECT_FLOAT_FLOAT,
+                  G_TYPE_NONE, 3,
+                  CLUTTER_TYPE_ACTOR,
+                  G_TYPE_FLOAT,
+                  G_TYPE_FLOAT);
+
+
+  /**
+   * ClutterDropAction::drop-cancel:
+   * @action: the #ClutterDropAction that emitted the signal
+   * @actor: the #ClutterActor attached to the @action
+   * @event_x: the X coordinate (in stage space) of the drop event
+   * @event_y: the Y coordinate (in stage space) of the drop event
+   *
+   * The ::drop-cancel signal is emitted when the drop is refused
+   * by an emission of the #ClutterDropAction::can-drop signal.
+   *
+   * After the ::drop-cancel signal is fired the active drag is
+   * terminated.
+   *
+   * Since: 1.12
+   */
+  drop_signals[DROP_CANCEL] =
+    g_signal_new (I_("drop-cancel"),
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (ClutterDropActionClass, drop),

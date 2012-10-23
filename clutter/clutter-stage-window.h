@@ -1,18 +1,17 @@
 #ifndef __CLUTTER_STAGE_WINDOW_H__
 #define __CLUTTER_STAGE_WINDOW_H__
 
-#include <clutter/clutter-actor.h>
 #include <cogl/cogl.h>
-#include <cairo.h>
+#include <clutter/clutter-types.h>
 
 G_BEGIN_DECLS
 
-#define CLUTTER_TYPE_STAGE_WINDOW               (clutter_stage_window_get_type ())
+#define CLUTTER_TYPE_STAGE_WINDOW               (_clutter_stage_window_get_type ())
 #define CLUTTER_STAGE_WINDOW(obj)               (G_TYPE_CHECK_INSTANCE_CAST ((obj), CLUTTER_TYPE_STAGE_WINDOW, ClutterStageWindow))
 #define CLUTTER_IS_STAGE_WINDOW(obj)            (G_TYPE_CHECK_INSTANCE_TYPE ((obj), CLUTTER_TYPE_STAGE_WINDOW))
 #define CLUTTER_STAGE_WINDOW_GET_IFACE(obj)     (G_TYPE_INSTANCE_GET_INTERFACE ((obj), CLUTTER_TYPE_STAGE_WINDOW, ClutterStageWindowIface))
 
-/**
+/*
  * ClutterStageWindow: (skip)
  *
  * <structname>ClutterStageWindow</structname> is an opaque structure
@@ -23,7 +22,7 @@ G_BEGIN_DECLS
 typedef struct _ClutterStageWindow      ClutterStageWindow; /* dummy */
 typedef struct _ClutterStageWindowIface ClutterStageWindowIface;
 
-/**
+/*
  * ClutterStageWindowIface: (skip)
  *
  * The interface implemented by backends for stage windows
@@ -75,9 +74,11 @@ struct _ClutterStageWindowIface
   void              (* redraw)                  (ClutterStageWindow *stage_window);
 
   CoglFramebuffer  *(* get_active_framebuffer)  (ClutterStageWindow *stage_window);
+
+  gboolean          (* can_clip_redraws)        (ClutterStageWindow *stage_window);
 };
 
-GType clutter_stage_window_get_type (void) G_GNUC_CONST;
+GType _clutter_stage_window_get_type (void) G_GNUC_CONST;
 
 ClutterActor *    _clutter_stage_window_get_wrapper        (ClutterStageWindow *window);
 
@@ -117,6 +118,8 @@ void              _clutter_stage_window_set_accept_focus        (ClutterStageWin
 void              _clutter_stage_window_redraw                  (ClutterStageWindow *window);
 
 CoglFramebuffer  *_clutter_stage_window_get_active_framebuffer  (ClutterStageWindow *window);
+
+gboolean          _clutter_stage_window_can_clip_redraws        (ClutterStageWindow *window);
 
 G_END_DECLS
 

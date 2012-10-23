@@ -30,16 +30,16 @@
  * to control how a #ClutterAnimation will animate a property.
  *
  * Each #ClutterAnimatable should implement the
- * <function>animate_property</function> virtual function of the interface
- * to compute the animation state between two values of an interval depending
- * on a progress factor, expressed as a floating point value.
+ * #ClutterAnimatableIface.interpolate_property() virtual function of the
+ * interface to compute the animation state between two values of an interval
+ * depending on a progress factor, expressed as a floating point value.
  *
  * If a #ClutterAnimatable is animated by a #ClutterAnimation
  * instance, the #ClutterAnimation will call
- * clutter_animatable_animate_property() passing the name of the
- * currently animated property; the initial and final values of
- * the animation interval; the progress factor. The #ClutterAnimatable
- * implementation should return the computed value for the animated
+ * clutter_animatable_interpolate_property() passing the name of the
+ * currently animated property; the values interval; and the progress factor.
+ * The #ClutterAnimatable implementation should return the computed value for
+ * the animated
  * property.
  *
  * #ClutterAnimatable is available since Clutter 1.0
@@ -49,9 +49,15 @@
 #include "config.h"
 #endif
 
+#define CLUTTER_DISABLE_DEPRECATION_WARNINGS
+
 #include "clutter-animatable.h"
+#include "clutter-interval.h"
 #include "clutter-debug.h"
 #include "clutter-private.h"
+
+#include "deprecated/clutter-animatable.h"
+#include "deprecated/clutter-animation.h"
 
 typedef ClutterAnimatableIface  ClutterAnimatableInterface;
 G_DEFINE_INTERFACE (ClutterAnimatable, clutter_animatable, G_TYPE_OBJECT);

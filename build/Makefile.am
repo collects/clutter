@@ -1,3 +1,1 @@
-SUBDIRS = autotools mingw
-
-EXTRA_DIST = gen-gcov.pl
+SUBDIRS = autotools mingw win32

@@ -15,6 +15,8 @@ json_files = \
 	test-animator-2.json			\
 	test-animator-3.json			\
 	test-state-1.json			\
+	test-script-timeline-markers.json	\
+	test-script-margin.json 		\
 	$(NULL)
 
 png_files = \

@@ -45,16 +45,17 @@ G_BEGIN_DECLS
  * Generic representation of an input device. The actual contents of this
  * structure depend on the backend used.
  */
-typedef struct _ClutterInputDevice      ClutterInputDevice;
 typedef struct _ClutterInputDeviceClass ClutterInputDeviceClass;
 
 GType clutter_input_device_get_type (void) G_GNUC_CONST;
 
 ClutterInputDeviceType  clutter_input_device_get_device_type    (ClutterInputDevice  *device);
 gint                    clutter_input_device_get_device_id      (ClutterInputDevice  *device);
-void                    clutter_input_device_get_device_coords  (ClutterInputDevice  *device,
-                                                                 gint                *x,
-                                                                 gint                *y);
+
+CLUTTER_AVAILABLE_IN_1_12
+gboolean                clutter_input_device_get_coords        (ClutterInputDevice   *device,
+                                                                ClutterEventSequence *sequence,
+                                                                ClutterPoint         *point);
 ClutterActor *          clutter_input_device_get_pointer_actor  (ClutterInputDevice  *device);
 ClutterStage *          clutter_input_device_get_pointer_stage  (ClutterInputDevice  *device);
 const gchar *           clutter_input_device_get_device_name    (ClutterInputDevice  *device);
@@ -89,10 +90,28 @@ void                    clutter_input_device_update_from_event  (ClutterInputDev
                                                                  ClutterEvent        *event,
                                                                  gboolean             update_stage);
 
+CLUTTER_AVAILABLE_IN_1_10
 void                    clutter_input_device_grab               (ClutterInputDevice  *device,
                                                                  ClutterActor        *actor);
+CLUTTER_AVAILABLE_IN_1_10
 void                    clutter_input_device_ungrab             (ClutterInputDevice  *device);
+CLUTTER_AVAILABLE_IN_1_10
 ClutterActor *          clutter_input_device_get_grabbed_actor  (ClutterInputDevice  *device);
+
+CLUTTER_AVAILABLE_IN_1_12
+void                    clutter_input_device_sequence_grab      (ClutterInputDevice   *device,
+                                                                 ClutterEventSequence *sequence,
+                                                                 ClutterActor         *actor);
+CLUTTER_AVAILABLE_IN_1_12
+void                    clutter_input_device_sequence_ungrab    (ClutterInputDevice   *device,
+                                                                 ClutterEventSequence *sequence);
+CLUTTER_AVAILABLE_IN_1_12
+ClutterActor *          clutter_input_device_sequence_get_grabbed_actor (ClutterInputDevice   *device,
+                                                                         ClutterEventSequence *sequence);
+
+gboolean                clutter_input_device_keycode_to_evdev   (ClutterInputDevice *device,
+                                                                 guint               hardware_keycode,
+                                                                 guint              *evdev_keycode);
 
 G_END_DECLS
 

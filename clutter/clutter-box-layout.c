@@ -35,18 +35,15 @@
  *   <listitem><para>all children are arranged on a single
  *   line;</para></listitem>
  *   <listitem><para>the axis used is controlled by the
- *   #ClutterBoxLayout:vertical boolean property;</para></listitem>
+ *   #ClutterBoxLayout:orientation property;</para></listitem>
  *   <listitem><para>the order of the packing is determined by the
  *   #ClutterBoxLayout:pack-start boolean property;</para></listitem>
  *   <listitem><para>each child will be allocated to its natural
- *   size or, if set to expand, the available size;</para></listitem>
- *   <listitem><para>if a child is set to fill on either (or both)
- *   axis, its allocation will match all the available size; the
- *   fill layout property only makes sense if the expand property is
- *   also set;</para></listitem>
- *   <listitem><para>if a child is set to expand but not to fill then
- *   it is possible to control the alignment using the X and Y alignment
- *   layout properties.</para></listitem>
+ *   size or, if #ClutterActor:x-expand/#ClutterActor:y-expand
+ *   is set, the available size;</para></listitem>
+ *   <listitem><para>honours the #ClutterActor's #ClutterActor:x-align
+ *   and #ClutterActor:y-align properties to fill the available
+ *   size;</para></listitem>
  *   <listitem><para>if the #ClutterBoxLayout:homogeneous boolean property
  *   is set, then all widgets will get the same size, ignoring expand
  *   settings and the preferred sizes</para></listitem>
@@ -62,10 +59,6 @@
  * It is possible to control the spacing between children of a
  * #ClutterBoxLayout by using clutter_box_layout_set_spacing().
  *
- * In order to set the layout properties when packing an actor inside a
- * #ClutterBoxLayout you should use the clutter_box_layout_pack()
- * function.
- *
  * #ClutterBoxLayout is available since Clutter 1.2
  */
 
@@ -75,7 +68,13 @@
 
 #include <math.h>
 
+#define CLUTTER_DISABLE_DEPRECATION_WARNINGS
+#include "deprecated/clutter-container.h"
+#include "deprecated/clutter-alpha.h"
+
 #include "clutter-box-layout.h"
+
+#include "clutter-actor-private.h"
 #include "clutter-debug.h"
 #include "clutter-enum-types.h"
 #include "clutter-layout-meta.h"
@@ -100,9 +99,9 @@ struct _ClutterBoxLayoutPrivate
   gulong easing_mode;
   guint easing_duration;
 
-  guint is_vertical    : 1;
+  ClutterOrientation orientation;
+
   guint is_pack_start  : 1;
-  guint is_animating   : 1;
   guint use_animations : 1;
   guint is_homogeneous : 1;
 };
@@ -114,12 +113,9 @@ struct _ClutterBoxChild
   ClutterBoxAlignment x_align;
   ClutterBoxAlignment y_align;
 
-  ClutterActorBox last_allocation;
-
   guint x_fill              : 1;
   guint y_fill              : 1;
   guint expand              : 1;
-  guint has_last_allocation : 1;
 };
 
 enum
@@ -130,7 +126,9 @@ enum
   PROP_CHILD_Y_ALIGN,
   PROP_CHILD_X_FILL,
   PROP_CHILD_Y_FILL,
-  PROP_CHILD_EXPAND
+  PROP_CHILD_EXPAND,
+
+  PROP_CHILD_LAST
 };
 
 enum
@@ -143,8 +141,15 @@ enum
   PROP_PACK_START,
   PROP_USE_ANIMATIONS,
   PROP_EASING_MODE,
-  PROP_EASING_DURATION
+  PROP_EASING_DURATION,
+  PROP_ORIENTATION,
+
+  PROP_LAST
 };
+
+static GParamSpec *obj_props[PROP_LAST] = { NULL, };
+
+GType clutter_box_child_get_type (void);
 
 G_DEFINE_TYPE (ClutterBoxChild,
                clutter_box_child,
@@ -153,6 +158,23 @@ G_DEFINE_TYPE (ClutterBoxChild,
 G_DEFINE_TYPE (ClutterBoxLayout,
                clutter_box_layout,
                CLUTTER_TYPE_LAYOUT_MANAGER);
+
+
+typedef struct _RequestedSize
+{
+  ClutterActor *actor;
+
+  gfloat minimum_size;
+  gfloat natural_size;
+} RequestedSize;
+
+static gint distribute_natural_allocation (gint                  extra_space,
+					   guint                 n_requested_sizes,
+					   RequestedSize        *sizes);
+static void count_expand_children         (ClutterLayoutManager *layout,
+					   ClutterContainer     *container,
+					   gint                 *visible_children,
+					   gint                 *expand_children);
 
 /*
  * ClutterBoxChild
@@ -182,19 +204,10 @@ box_child_set_align (ClutterBoxChild     *self,
   if (x_changed || y_changed)
     {
       ClutterLayoutManager *layout;
-      ClutterBoxLayout *box;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      box = CLUTTER_BOX_LAYOUT (layout);
 
-      if (box->priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  box->priv->easing_duration,
-                                                  box->priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
+      clutter_layout_manager_layout_changed (layout);
 
       if (x_changed)
         g_object_notify (G_OBJECT (self), "x-align");
@@ -228,19 +241,10 @@ box_child_set_fill (ClutterBoxChild *self,
   if (x_changed || y_changed)
     {
       ClutterLayoutManager *layout;
-      ClutterBoxLayout *box;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      box = CLUTTER_BOX_LAYOUT (layout);
 
-      if (box->priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  box->priv->easing_duration,
-                                                  box->priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
+      clutter_layout_manager_layout_changed (layout);
 
       if (x_changed)
         g_object_notify (G_OBJECT (self), "x-fill");
@@ -257,21 +261,12 @@ box_child_set_expand (ClutterBoxChild *self,
   if (self->expand != expand)
     {
       ClutterLayoutManager *layout;
-      ClutterBoxLayout *box;
 
       self->expand = expand;
 
       layout = clutter_layout_meta_get_manager (CLUTTER_LAYOUT_META (self));
-      box = CLUTTER_BOX_LAYOUT (layout);
 
-      if (box->priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (layout,
-                                                  box->priv->easing_duration,
-                                                  box->priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (layout);
+      clutter_layout_manager_layout_changed (layout);
 
       g_object_notify (G_OBJECT (self), "expand");
     }
@@ -419,8 +414,6 @@ clutter_box_child_init (ClutterBoxChild *self)
   self->x_fill = self->y_fill = FALSE;
 
   self->expand = FALSE;
-
-  self->has_last_allocation = FALSE;
 }
 
 static gdouble
@@ -463,9 +456,9 @@ clutter_box_layout_set_container (ClutterLayoutManager *layout,
       /* we need to change the :request-mode of the container
        * to match the orientation
        */
-      request_mode = (priv->is_vertical
-                      ? CLUTTER_REQUEST_HEIGHT_FOR_WIDTH
-                      : CLUTTER_REQUEST_WIDTH_FOR_HEIGHT);
+      request_mode = priv->orientation == CLUTTER_ORIENTATION_VERTICAL
+                   ? CLUTTER_REQUEST_HEIGHT_FOR_WIDTH
+                   : CLUTTER_REQUEST_WIDTH_FOR_HEIGHT;
       clutter_actor_set_request_mode (CLUTTER_ACTOR (priv->container),
                                       request_mode);
     }
@@ -475,157 +468,260 @@ clutter_box_layout_set_container (ClutterLayoutManager *layout,
 }
 
 static void
-get_preferred_width (ClutterBoxLayout *self,
-                     ClutterContainer *container,
-                     GList            *children,
-                     gfloat            for_height,
-                     gfloat           *min_width_p,
-                     gfloat           *natural_width_p)
+get_child_size (ClutterActor       *actor,
+		ClutterOrientation  orientation,
+		gfloat              for_size,
+		gfloat             *min_size_p,
+		gfloat             *natural_size_p)
+{
+  if (orientation == CLUTTER_ORIENTATION_HORIZONTAL)
+    clutter_actor_get_preferred_width (actor, for_size, min_size_p, natural_size_p);
+  else
+    clutter_actor_get_preferred_height (actor, for_size, min_size_p, natural_size_p);
+}
+
+/* Handle the request in the orientation of the box (i.e. width request of horizontal box) */
+static void
+get_preferred_size_for_orientation (ClutterBoxLayout   *self,
+				    ClutterActor       *container,
+				    gfloat              for_size,
+				    gfloat             *min_size_p,
+				    gfloat             *natural_size_p)
 {
   ClutterBoxLayoutPrivate *priv = self->priv;
+  ClutterActorIter iter;
+  ClutterActor *child;
   gint n_children = 0;
-  gboolean is_rtl;
-  GList *l;
+  gfloat minimum, natural;
 
-  if (min_width_p)
-    *min_width_p = 0;
+  minimum = natural = 0;
 
-  if (natural_width_p)
-    *natural_width_p = 0;
-
-  if (!priv->is_vertical)
+  clutter_actor_iter_init (&iter, container);
+  while (clutter_actor_iter_next (&iter, &child))
     {
-      ClutterTextDirection text_dir;
-
-      text_dir = clutter_actor_get_text_direction (CLUTTER_ACTOR (container));
-      is_rtl = (text_dir == CLUTTER_TEXT_DIRECTION_RTL) ? TRUE : FALSE;
-    }
-  else
-    is_rtl = FALSE;
-
-  for (l = (is_rtl) ? g_list_last (children) : children;
-       l != NULL;
-       l = (is_rtl) ? l->prev : l->next)
-    {
-      ClutterActor *child = l->data;
       gfloat child_min = 0, child_nat = 0;
 
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
-        continue;
+	continue;
 
       n_children++;
 
-      clutter_actor_get_preferred_width (child,
-                                         (!priv->is_vertical)
-                                           ? for_height
-                                           : -1,
-                                         &child_min,
-                                         &child_nat);
+      get_child_size (child, priv->orientation,
+		      for_size, &child_min, &child_nat);
 
-      if (priv->is_vertical)
-        {
-          if (min_width_p)
-            *min_width_p = MAX (child_min, *min_width_p);
-
-          if (natural_width_p)
-            *natural_width_p = MAX (child_nat, *natural_width_p);
-        }
-      else
-        {
-          if (min_width_p)
-            *min_width_p += child_min;
-
-          if (natural_width_p)
-            *natural_width_p += child_nat;
-        }
+      minimum += child_min;
+      natural += child_nat;
     }
 
-
-  if (!priv->is_vertical && n_children > 1)
+  if (n_children > 1)
     {
-      if (min_width_p)
-        *min_width_p += priv->spacing * (n_children - 1);
-
-      if (natural_width_p)
-        *natural_width_p += priv->spacing * (n_children - 1);
+      minimum += priv->spacing * (n_children - 1);
+      natural += priv->spacing * (n_children - 1);
     }
+
+  if (min_size_p)
+    *min_size_p = minimum;
+
+  if (natural_size_p)
+    *natural_size_p = natural;
 }
 
 static void
-get_preferred_height (ClutterBoxLayout *self,
-                      ClutterContainer *container,
-                      GList            *children,
-                      gfloat            for_width,
-                      gfloat           *min_height_p,
-                      gfloat           *natural_height_p)
+get_base_size_for_opposite_orientation (ClutterBoxLayout   *self,
+					ClutterActor       *container,
+					gfloat             *min_size_p,
+					gfloat             *natural_size_p)
 {
   ClutterBoxLayoutPrivate *priv = self->priv;
+  ClutterActorIter iter;
+  ClutterActor *child;
   gint n_children = 0;
-  gboolean is_rtl;
-  GList *l;
+  gfloat minimum, natural;
+  ClutterOrientation opposite_orientation =
+    priv->orientation == CLUTTER_ORIENTATION_HORIZONTAL
+    ? CLUTTER_ORIENTATION_VERTICAL
+    : CLUTTER_ORIENTATION_HORIZONTAL;
 
-  if (min_height_p)
-    *min_height_p = 0;
+  minimum = natural = 0;
 
-  if (natural_height_p)
-    *natural_height_p = 0;
-
-  if (!priv->is_vertical)
+  clutter_actor_iter_init (&iter, container);
+  while (clutter_actor_iter_next (&iter, &child))
     {
-      ClutterTextDirection text_dir;
+      gfloat child_min = 0, child_nat = 0;
 
-      text_dir = clutter_actor_get_text_direction (CLUTTER_ACTOR (container));
-      is_rtl = (text_dir == CLUTTER_TEXT_DIRECTION_RTL) ? TRUE : FALSE;
+      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
+	continue;
+
+      n_children++;
+
+      get_child_size (child, opposite_orientation, -1, &child_min, &child_nat);
+
+      minimum = MAX (minimum, child_min);
+      natural = MAX (natural, child_nat);
+    }
+
+  if (min_size_p)
+    *min_size_p = minimum;
+
+  if (natural_size_p)
+    *natural_size_p = natural;
+}
+
+
+/* Handle the request in the opposite orientation of the box
+ * (i.e. height request of horizontal box)
+ *
+ * This operation requires a virtual allocation in the natural
+ * orientation of the box, after that each element must be asked
+ * for the size-for-virtually-allocated-size and the maximums of
+ * each child sample will be reported as the overall
+ * "size-for-size-in-opposite-orientation"
+ */
+static void
+get_preferred_size_for_opposite_orientation (ClutterBoxLayout   *self,
+					     ClutterActor       *container,
+					     gfloat              for_size,
+					     gfloat             *min_size_p,
+					     gfloat             *natural_size_p)
+{
+  ClutterLayoutManager *layout = CLUTTER_LAYOUT_MANAGER (self);
+  ClutterBoxLayoutPrivate *priv = self->priv;
+  ClutterContainer *real_container = CLUTTER_CONTAINER (container);
+  ClutterActor *child;
+  ClutterActorIter iter;
+  gint nvis_children = 0, n_extra_widgets = 0;
+  gint nexpand_children = 0, i;
+  RequestedSize *sizes;
+  gfloat minimum, natural, size, extra = 0;
+  ClutterOrientation opposite_orientation =
+    priv->orientation == CLUTTER_ORIENTATION_HORIZONTAL
+    ? CLUTTER_ORIENTATION_VERTICAL
+    : CLUTTER_ORIENTATION_HORIZONTAL;
+
+  minimum = natural = 0;
+
+  count_expand_children (layout, real_container,
+			 &nvis_children, &nexpand_children);
+
+  if (nvis_children < 1)
+    {
+      if (min_size_p)
+	*min_size_p = 0;
+
+      if (natural_size_p)
+	*natural_size_p = 0;
+
+      return;
+    }
+
+  /* First collect the requested sizes in the natural orientation of the box */
+  sizes  = g_newa (RequestedSize, nvis_children);
+  size   = for_size;
+
+  i = 0;
+  clutter_actor_iter_init (&iter, container);
+  while (clutter_actor_iter_next (&iter, &child))
+    {
+      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
+	continue;
+
+      get_child_size (child, priv->orientation, -1,
+		      &sizes[i].minimum_size,
+		      &sizes[i].natural_size);
+
+      size -= sizes[i].minimum_size;
+      i++;
+    }
+
+  if (priv->is_homogeneous)
+    {
+      size            = for_size - (nvis_children - 1) * priv->spacing;
+      extra           = size / nvis_children;
+      n_extra_widgets = ((gint)size) % nvis_children;
     }
   else
-    is_rtl = FALSE;
-
-  for (l = (is_rtl) ? g_list_last (children) : children;
-       l != NULL;
-       l = (is_rtl) ? l->prev : l->next)
     {
-      ClutterActor *child = l->data;
+      /* Bring children up to size first */
+      size = distribute_natural_allocation (MAX (0, size), nvis_children, sizes);
+
+      /* Calculate space which hasn't distributed yet,
+       * and is available for expanding children.
+       */
+      if (nexpand_children > 0)
+        {
+          extra = size / nexpand_children;
+          n_extra_widgets = ((gint)size) % nexpand_children;
+        }
+    }
+
+  /* Distribute expand space to children */
+  i = 0;
+  clutter_actor_iter_init (&iter, container);
+  while (clutter_actor_iter_next (&iter, &child))
+    {
+      ClutterLayoutMeta *meta;
+      ClutterBoxChild   *box_child;
+
+      /* If widget is not visible, skip it. */
+      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
+        continue;
+
+      meta      = clutter_layout_manager_get_child_meta (layout, real_container, child);
+      box_child = CLUTTER_BOX_CHILD (meta);
+
+      if (priv->is_homogeneous)
+	{
+	  sizes[i].minimum_size = extra;
+
+          if (n_extra_widgets > 0)
+            {
+              sizes[i].minimum_size++;
+              n_extra_widgets--;
+            }
+	}
+      else
+	{
+          if (clutter_actor_needs_expand (child, priv->orientation) || box_child->expand)
+            {
+              sizes[i].minimum_size += extra;
+
+              if (n_extra_widgets > 0)
+                {
+                  sizes[i].minimum_size++;
+                  n_extra_widgets--;
+                }
+            }
+	}
+      i++;
+    }
+
+  /* Virtual allocation finished, now we can finally ask for the right size-for-size */
+  i = 0;
+  clutter_actor_iter_init (&iter, container);
+  while (clutter_actor_iter_next (&iter, &child))
+    {
       gfloat child_min = 0, child_nat = 0;
 
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
         continue;
 
-      n_children++;
+      get_child_size (child, opposite_orientation,
+		      sizes[i].minimum_size,
+		      &child_min, &child_nat);
 
-      clutter_actor_get_preferred_height (child,
-                                          (priv->is_vertical)
-                                            ? for_width
-                                            : -1,
-                                          &child_min,
-                                          &child_nat);
+      minimum = MAX (minimum, child_min);
+      natural = MAX (natural, child_nat);
 
-      if (!priv->is_vertical)
-        {
-          if (min_height_p)
-            *min_height_p = MAX (child_min, *min_height_p);
-
-          if (natural_height_p)
-            *natural_height_p = MAX (child_nat, *natural_height_p);
-        }
-      else
-        {
-          if (min_height_p)
-            *min_height_p += child_min;
-
-          if (natural_height_p)
-            *natural_height_p += child_nat;
-        }
+      i++;
     }
 
-  if (priv->is_vertical && n_children > 1)
-    {
-      if (min_height_p)
-        *min_height_p += priv->spacing * (n_children - 1);
+  if (min_size_p)
+    *min_size_p = minimum;
 
-      if (natural_height_p)
-        *natural_height_p += priv->spacing * (n_children - 1);
-    }
+  if (natural_size_p)
+    *natural_size_p = natural;
 }
+
 
 static void
 allocate_box_child (ClutterBoxLayout       *self,
@@ -635,74 +731,43 @@ allocate_box_child (ClutterBoxLayout       *self,
                     ClutterAllocationFlags  flags)
 {
   ClutterBoxLayoutPrivate *priv = self->priv;
-  ClutterBoxChild         *box_child;
-  ClutterLayoutMeta       *meta;
-  ClutterActorBox          final_child_box;
+  ClutterBoxChild *box_child;
+  ClutterLayoutMeta *meta;
 
   meta = clutter_layout_manager_get_child_meta (CLUTTER_LAYOUT_MANAGER (self),
                                                 container,
                                                 child);
   box_child = CLUTTER_BOX_CHILD (meta);
 
-  clutter_actor_allocate_align_fill (child, child_box,
-                                     get_box_alignment_factor (box_child->x_align),
-                                     get_box_alignment_factor (box_child->y_align),
-                                     box_child->x_fill,
-                                     box_child->y_fill,
-                                     flags);
+  CLUTTER_NOTE (LAYOUT, "Allocation for %s { %.2f, %.2f, %.2f, %.2f }",
+                _clutter_actor_get_debug_name (child),
+                child_box->x1, child_box->y1,
+                child_box->x2 - child_box->x1,
+                child_box->y2 - child_box->y1);
 
-  /* retrieve the allocation computed and set by allocate_align_fill();
-   * since we call this *after* allocate(), it's just a cheap copy
+  if (priv->use_animations)
+    {
+      clutter_actor_save_easing_state (child);
+      clutter_actor_set_easing_mode (child, priv->easing_mode);
+      clutter_actor_set_easing_duration (child, priv->easing_duration);
+    }
+
+  /* call allocate() instead of allocate_align_fill() if the actor needs
+   * expand in either direction. this will honour the actors alignment settings
    */
-  clutter_actor_get_allocation_box (child, &final_child_box);
-
-  if (priv->use_animations && priv->is_animating)
-    {
-      ClutterLayoutManager *manager = CLUTTER_LAYOUT_MANAGER (self);
-      ClutterActorBox *start, end;
-      gdouble p;
-
-      p = clutter_layout_manager_get_animation_progress (manager);
-
-      if (!box_child->has_last_allocation)
-        {
-          /* if there is no allocation available then the child has just
-           * been added to the container; we put it in the final state
-           * and store its allocation for later
-           */
-          box_child->last_allocation = final_child_box;
-          box_child->has_last_allocation = TRUE;
-
-          goto do_allocate;
-        }
-
-      start = &box_child->last_allocation;
-      end = final_child_box;
-
-      /* interpolate between the initial and final values */
-      clutter_actor_box_interpolate (start, &end, p, &final_child_box);
-
-      CLUTTER_NOTE (ANIMATION,
-                    "Animate { %.1f, %.1f, %.1f, %.1f }\t"
-                     "%.3f * { %.1f, %.1f, %.1f, %.1f }\t"
-                         "-> { %.1f, %.1f, %.1f, %.1f }",
-                    start->x1, start->y1,
-                    start->x2, start->y2,
-                    p,
-                    final_child_box.x1, final_child_box.y1,
-                    final_child_box.x2, final_child_box.y2,
-                    end.x1, end.y1,
-                    end.x2, end.y2);
-    }
+  if (clutter_actor_needs_expand (child, CLUTTER_ORIENTATION_HORIZONTAL) ||
+      clutter_actor_needs_expand (child, CLUTTER_ORIENTATION_VERTICAL))
+    clutter_actor_allocate (child, child_box, flags);
   else
-    {
-      /* store the allocation for later animations */
-      box_child->last_allocation = final_child_box;
-      box_child->has_last_allocation = TRUE;
-    }
+    clutter_actor_allocate_align_fill (child, child_box,
+                                       get_box_alignment_factor (box_child->x_align),
+                                       get_box_alignment_factor (box_child->y_align),
+                                       box_child->x_fill,
+                                       box_child->y_fill,
+                                       flags);
 
-do_allocate:
-  clutter_actor_allocate (child, &final_child_box, flags);
+  if (priv->use_animations)
+    clutter_actor_restore_easing_state (child);
 }
 
 static void
@@ -712,16 +777,21 @@ clutter_box_layout_get_preferred_width (ClutterLayoutManager *layout,
                                         gfloat               *min_width_p,
                                         gfloat               *natural_width_p)
 {
-  ClutterBoxLayout *self = CLUTTER_BOX_LAYOUT (layout);
-  GList *children;
+  ClutterBoxLayout        *self = CLUTTER_BOX_LAYOUT (layout);
+  ClutterBoxLayoutPrivate *priv = self->priv;
 
-  children = clutter_container_get_children (container);
-
-  get_preferred_width (self, container, children, for_height,
-                       min_width_p,
-                       natural_width_p);
-
-  g_list_free (children);
+  if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
+    {
+      if (for_height < 0)
+	get_base_size_for_opposite_orientation (self, CLUTTER_ACTOR (container),
+						min_width_p, natural_width_p);
+      else
+	get_preferred_size_for_opposite_orientation (self, CLUTTER_ACTOR (container), for_height,
+						     min_width_p, natural_width_p);
+    }
+  else
+    get_preferred_size_for_orientation (self, CLUTTER_ACTOR (container), for_height,
+					min_width_p, natural_width_p);
 }
 
 static void
@@ -731,16 +801,21 @@ clutter_box_layout_get_preferred_height (ClutterLayoutManager *layout,
                                          gfloat               *min_height_p,
                                          gfloat               *natural_height_p)
 {
-  ClutterBoxLayout *self = CLUTTER_BOX_LAYOUT (layout);
-  GList *children;
+  ClutterBoxLayout        *self = CLUTTER_BOX_LAYOUT (layout);
+  ClutterBoxLayoutPrivate *priv = self->priv;
 
-  children = clutter_container_get_children (container);
-
-  get_preferred_height (self, container, children, for_width,
-                        min_height_p,
-                        natural_height_p);
-
-  g_list_free (children);
+  if (priv->orientation == CLUTTER_ORIENTATION_HORIZONTAL)
+    {
+      if (for_width < 0)
+	get_base_size_for_opposite_orientation (self, CLUTTER_ACTOR (container),
+						min_height_p, natural_height_p);
+      else
+	get_preferred_size_for_opposite_orientation (self, CLUTTER_ACTOR (container), for_width,
+						     min_height_p, natural_height_p);
+    }
+  else
+    get_preferred_size_for_orientation (self, CLUTTER_ACTOR (container), for_width,
+					min_height_p, natural_height_p);
 }
 
 static void
@@ -749,16 +824,17 @@ count_expand_children (ClutterLayoutManager *layout,
                        gint                 *visible_children,
                        gint                 *expand_children)
 {
-  GList        *children, *l;
-  ClutterActor *child;
+  ClutterBoxLayoutPrivate *priv = CLUTTER_BOX_LAYOUT (layout)->priv;
+  ClutterActor *actor, *child;
+  ClutterActorIter iter;
+
+  actor = CLUTTER_ACTOR (container);
 
   *visible_children = *expand_children = 0;
 
-  children = clutter_container_get_children (container);
-  for (l = children; l != NULL; l = l->next)
+  clutter_actor_iter_init (&iter, actor);
+  while (clutter_actor_iter_next (&iter, &child))
     {
-      child = l->data;
-
       if (CLUTTER_ACTOR_IS_VISIBLE (child))
         {
           ClutterLayoutMeta *meta;
@@ -769,29 +845,20 @@ count_expand_children (ClutterLayoutManager *layout,
                                                         container,
                                                         child);
 
-          if (CLUTTER_BOX_CHILD (meta)->expand)
+          if (clutter_actor_needs_expand (child, priv->orientation) ||
+              CLUTTER_BOX_CHILD (meta)->expand)
             *expand_children += 1;
         }
     }
-  g_list_free (children);
 }
 
-struct _ClutterRequestedSize
-{
-  ClutterActor *actor;
-
-  gfloat minimum_size;
-  gfloat natural_size;
-};
-
 /* Pulled from gtksizerequest.c from Gtk+ */
-
 static gint
 compare_gap (gconstpointer p1,
              gconstpointer p2,
              gpointer      data)
 {
-  struct _ClutterRequestedSize *sizes = data;
+  RequestedSize *sizes = data;
   const guint *c1 = p1;
   const guint *c2 = p2;
 
@@ -813,16 +880,16 @@ compare_gap (gconstpointer p1,
 /*
  * distribute_natural_allocation:
  * @extra_space: Extra space to redistribute among children after subtracting
- *               minimum sizes and any child padding from the overall allocation
+ *   minimum sizes and any child padding from the overall allocation
  * @n_requested_sizes: Number of requests to fit into the allocation
  * @sizes: An array of structs with a client pointer and a minimum/natural size
- *         in the orientation of the allocation.
+ *   in the orientation of the allocation.
  *
  * Distributes @extra_space to child @sizes by bringing smaller
  * children up to natural size first.
  *
  * The remaining space will be added to the @minimum_size member of the
- * GtkRequestedSize struct. If all sizes reach their natural size then
+ * RequestedSize struct. If all sizes reach their natural size then
  * the remaining space is returned.
  *
  * Returns: The remainder of @extra_space after redistributing space
@@ -831,9 +898,9 @@ compare_gap (gconstpointer p1,
  * Pulled from gtksizerequest.c from Gtk+
  */
 static gint
-distribute_natural_allocation (gint                   extra_space,
-                               guint                  n_requested_sizes,
-                               struct _ClutterRequestedSize *sizes)
+distribute_natural_allocation (gint           extra_space,
+                               guint          n_requested_sizes,
+                               RequestedSize *sizes)
 {
   guint *spreading;
   gint   i;
@@ -899,14 +966,14 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
                              ClutterAllocationFlags  flags)
 {
   ClutterBoxLayoutPrivate *priv = CLUTTER_BOX_LAYOUT (layout)->priv;
-  ClutterActor *child;
-  GList *children, *l;
+  ClutterActor *actor, *child;
   gint nvis_children;
   gint nexpand_children;
   gboolean is_rtl;
+  ClutterActorIter iter;
 
   ClutterActorBox child_allocation;
-  struct _ClutterRequestedSize *sizes;
+  RequestedSize *sizes;
 
   gint size;
   gint extra;
@@ -916,27 +983,33 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
 
   count_expand_children (layout, container, &nvis_children, &nexpand_children);
 
+  CLUTTER_NOTE (LAYOUT, "BoxLayout for %s: visible=%d, expand=%d",
+                _clutter_actor_get_debug_name (CLUTTER_ACTOR (container)),
+                nvis_children,
+                nexpand_children);
+
   /* If there is no visible child, simply return. */
   if (nvis_children <= 0)
     return;
 
-  sizes = g_newa (struct _ClutterRequestedSize, nvis_children);
+  sizes = g_newa (RequestedSize, nvis_children);
 
-  if (priv->is_vertical)
+  if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
     size = box->y2 - box->y1 - (nvis_children - 1) * priv->spacing;
   else
     size = box->x2 - box->x1 - (nvis_children - 1) * priv->spacing;
 
-  /* Retrieve desired size for visible children. */
-  children = clutter_container_get_children (container);
-  for (i = 0, l = children; l != NULL; l = l->next)
-    {
-      child = l->data;
+  actor = CLUTTER_ACTOR (container);
 
+  /* Retrieve desired size for visible children. */
+  i = 0;
+  clutter_actor_iter_init (&iter, actor);
+  while (clutter_actor_iter_next (&iter, &child))
+    {
       if (!CLUTTER_ACTOR_IS_VISIBLE (child))
         continue;
 
-      if (priv->is_vertical)
+      if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
         clutter_actor_get_preferred_height (child,
                                             box->x2 - box->x1,
                                             &sizes[i].minimum_size,
@@ -950,36 +1023,47 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
 
       /* Assert the api is working properly */
       if (sizes[i].minimum_size < 0)
-        g_error ("GtkBox child %s minimum %s: %f < 0 for %s %f",
-                 clutter_actor_get_name (child),
-                 priv->is_vertical ? "height" : "width",
+        g_error ("ClutterBoxLayout child %s minimum %s: %f < 0 for %s %f",
+                 _clutter_actor_get_debug_name (child),
+                 priv->orientation == CLUTTER_ORIENTATION_VERTICAL
+                   ? "height"
+                   : "width",
                  sizes[i].minimum_size,
-                 priv->is_vertical ? "width" : "height",
-                 priv->is_vertical ? box->x2 - box->x1 : box->y2 - box->y1);
+                 priv->orientation == CLUTTER_ORIENTATION_VERTICAL
+                   ? "width"
+                   : "height",
+                 priv->orientation == CLUTTER_ORIENTATION_VERTICAL
+                   ? box->x2 - box->x1
+                   : box->y2 - box->y1);
 
       if (sizes[i].natural_size < sizes[i].minimum_size)
-        g_error ("GtkBox child %s natural %s: %f < minimum %f for %s %f",
-                 clutter_actor_get_name (child),
-                 priv->is_vertical ? "height" : "width",
+        g_error ("ClutterBoxLayout child %s natural %s: %f < minimum %f for %s %f",
+                 _clutter_actor_get_debug_name (child),
+                 priv->orientation == CLUTTER_ORIENTATION_VERTICAL
+                   ? "height"
+                   : "width",
                  sizes[i].natural_size,
                  sizes[i].minimum_size,
-                 priv->is_vertical ? "width" : "height",
-                 priv->is_vertical ? box->x2 - box->x1 : box->y2 - box->y1);
+                 priv->orientation == CLUTTER_ORIENTATION_VERTICAL
+                   ? "width"
+                   : "height",
+                 priv->orientation == CLUTTER_ORIENTATION_VERTICAL
+                   ? box->x2 - box->x1
+                   : box->y2 - box->y1);
 
       size -= sizes[i].minimum_size;
 
       sizes[i].actor = child;
 
-      i++;
+      i += 1;
     }
-  g_list_free (children);
 
   if (priv->is_homogeneous)
     {
       /* If were homogenous we still need to run the above loop to get the
        * minimum sizes for children that are not going to fill
        */
-      if (priv->is_vertical)
+      if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
         size = box->y2 - box->y1 - (nvis_children - 1) * priv->spacing;
       else
         size = box->x2 - box->x1 - (nvis_children - 1) * priv->spacing;
@@ -1004,7 +1088,7 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
         extra = 0;
     }
 
-  if (!priv->is_vertical)
+  if (priv->orientation == CLUTTER_ORIENTATION_HORIZONTAL)
     {
       ClutterTextDirection text_dir;
 
@@ -1015,42 +1099,40 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
     is_rtl = FALSE;
 
   /* Allocate child positions. */
-  if (priv->is_vertical)
+  if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
     {
-      child_allocation.x1 = 0.0;
+      child_allocation.x1 = box->x1;
       child_allocation.x2 = MAX (1.0, box->x2 - box->x1);
       if (priv->is_pack_start)
-        y = 0.0;
-      else
         y = box->y2 - box->y1;
+      else
+        y = box->y1;
     }
   else
     {
-      child_allocation.y1 = 0.0;
+      child_allocation.y1 = box->y1;
       child_allocation.y2 = MAX (1.0, box->y2 - box->y1);
       if (priv->is_pack_start)
-        x = 0.0;
+        x = box->x2 - box->x1;
       else
-        x = 0.0 + box->x2 - box->x1;
+        x = box->x1;
     }
 
-  children = clutter_container_get_children (container);
-  for (i = g_list_length (children) - 1, l = g_list_last (children);
-       l != NULL;
-       l = l->prev, i--)
+  i = 0;
+  clutter_actor_iter_init (&iter, actor);
+  while (clutter_actor_iter_next (&iter, &child))
     {
       ClutterLayoutMeta *meta;
       ClutterBoxChild *box_child;
 
-      child = l->data;
+      /* If widget is not visible, skip it. */
+      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
+        continue;
+
       meta = clutter_layout_manager_get_child_meta (layout,
                                                     container,
                                                     child);
       box_child = CLUTTER_BOX_CHILD (meta);
-
-      /* If widget is not visible, skip it. */
-      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
-        continue;
 
       /* Assign the child's size. */
       if (priv->is_homogeneous)
@@ -1067,7 +1149,8 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
         {
           child_size = sizes[i].minimum_size;
 
-          if (box_child->expand)
+          if (clutter_actor_needs_expand (child, priv->orientation) ||
+              box_child->expand)
             {
               child_size += extra;
 
@@ -1080,9 +1163,10 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
         }
 
       /* Assign the child's position. */
-      if (priv->is_vertical)
+      if (priv->orientation == CLUTTER_ORIENTATION_VERTICAL)
         {
-          if (box_child->y_fill)
+          if (clutter_actor_needs_expand (child, priv->orientation) ||
+              box_child->y_fill)
             {
               child_allocation.y1 = y;
               child_allocation.y2 = child_allocation.y1 + MAX (1.0, child_size);
@@ -1095,22 +1179,23 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
 
           if (priv->is_pack_start)
             {
-              y += child_size + priv->spacing;
-            }
-          else
-            {
               y -= child_size + priv->spacing;
 
               child_allocation.y1 -= child_size;
               child_allocation.y2 -= child_size;
             }
+          else
+            {
+              y += child_size + priv->spacing;
+            }
         }
-      else /* !priv->is_vertical */
+      else /* CLUTTER_ORIENTATION_HORIZONTAL */
         {
-          if (box_child->x_fill)
+          if (clutter_actor_needs_expand (child, priv->orientation) ||
+              box_child->x_fill)
             {
               child_allocation.x1 = x;
-              child_allocation.x2 = child_allocation.x1 + MAX (1, child_size);
+              child_allocation.x2 = child_allocation.x1 + MAX (1.0, child_size);
             }
           else
             {
@@ -1120,21 +1205,23 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
 
           if (priv->is_pack_start)
             {
-              x += child_size + priv->spacing;
-            }
-          else
-            {
               x -= child_size + priv->spacing;
 
               child_allocation.x1 -= child_size;
               child_allocation.x2 -= child_size;
+            }
+          else
+            {
+              x += child_size + priv->spacing;
             }
 
           if (is_rtl)
             {
               gfloat width = child_allocation.x2 - child_allocation.x1;
 
-              child_allocation.x1 = box->x2 - box->x1 - child_allocation.x1 - (child_allocation.x2 - child_allocation.x1);
+              child_allocation.x1 = box->x2 - box->x1
+                                  - child_allocation.x1
+                                  - (child_allocation.x2 - child_allocation.x1);
               child_allocation.x2 = child_allocation.x1 + width;
             }
 
@@ -1145,37 +1232,9 @@ clutter_box_layout_allocate (ClutterLayoutManager   *layout,
                             child,
                             &child_allocation,
                             flags);
+
+        i += 1;
     }
-  g_list_free (children);
-}
-
-static ClutterAlpha *
-clutter_box_layout_begin_animation (ClutterLayoutManager *manager,
-                                    guint                 duration,
-                                    gulong                easing)
-{
-  ClutterBoxLayoutPrivate *priv = CLUTTER_BOX_LAYOUT (manager)->priv;
-  ClutterLayoutManagerClass *parent_class;
-
-  priv->is_animating = TRUE;
-
-  /* we want the default implementation */
-  parent_class = CLUTTER_LAYOUT_MANAGER_CLASS (clutter_box_layout_parent_class);
-
-  return parent_class->begin_animation (manager, duration, easing);
-}
-
-static void
-clutter_box_layout_end_animation (ClutterLayoutManager *manager)
-{
-  ClutterBoxLayoutPrivate *priv = CLUTTER_BOX_LAYOUT (manager)->priv;
-  ClutterLayoutManagerClass *parent_class;
-
-  priv->is_animating = FALSE;
-
-  /* we want the default implementation */
-  parent_class = CLUTTER_LAYOUT_MANAGER_CLASS (clutter_box_layout_parent_class);
-  parent_class->end_animation (manager);
 }
 
 static void
@@ -1190,6 +1249,10 @@ clutter_box_layout_set_property (GObject      *gobject,
     {
     case PROP_VERTICAL:
       clutter_box_layout_set_vertical (self, g_value_get_boolean (value));
+      break;
+
+    case PROP_ORIENTATION:
+      clutter_box_layout_set_orientation (self, g_value_get_enum (value));
       break;
 
     case PROP_HOMOGENEOUS:
@@ -1233,7 +1296,12 @@ clutter_box_layout_get_property (GObject    *gobject,
   switch (prop_id)
     {
     case PROP_VERTICAL:
-      g_value_set_boolean (value, priv->is_vertical);
+      g_value_set_boolean (value,
+                           priv->orientation == CLUTTER_ORIENTATION_VERTICAL);
+      break;
+
+    case PROP_ORIENTATION:
+      g_value_set_enum (value, priv->orientation);
       break;
 
     case PROP_HOMOGENEOUS:
@@ -1271,23 +1339,14 @@ clutter_box_layout_class_init (ClutterBoxLayoutClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   ClutterLayoutManagerClass *layout_class;
-  GParamSpec *pspec;
 
   layout_class = CLUTTER_LAYOUT_MANAGER_CLASS (klass);
 
-  gobject_class->set_property = clutter_box_layout_set_property;
-  gobject_class->get_property = clutter_box_layout_get_property;
-
-  layout_class->get_preferred_width =
-    clutter_box_layout_get_preferred_width;
-  layout_class->get_preferred_height =
-    clutter_box_layout_get_preferred_height;
+  layout_class->get_preferred_width = clutter_box_layout_get_preferred_width;
+  layout_class->get_preferred_height = clutter_box_layout_get_preferred_height;
   layout_class->allocate = clutter_box_layout_allocate;
   layout_class->set_container = clutter_box_layout_set_container;
-  layout_class->get_child_meta_type =
-    clutter_box_layout_get_child_meta_type;
-  layout_class->begin_animation = clutter_box_layout_begin_animation;
-  layout_class->end_animation = clutter_box_layout_end_animation;
+  layout_class->get_child_meta_type = clutter_box_layout_get_child_meta_type;
 
   g_type_class_add_private (klass, sizeof (ClutterBoxLayoutPrivate));
 
@@ -1298,14 +1357,35 @@ clutter_box_layout_class_init (ClutterBoxLayoutClass *klass)
    * alongside the Y axis, instead of alongside the X axis
    *
    * Since: 1.2
+   *
+   * Deprecated: 1.12: Use #ClutterBoxLayout:orientation instead.
    */
-  pspec = g_param_spec_boolean ("vertical",
-                                P_("Vertical"),
-                                P_("Whether the layout should be vertical, "
-                                   "rather than horizontal"),
-                                FALSE,
-                                CLUTTER_PARAM_READWRITE);
-  g_object_class_install_property (gobject_class, PROP_VERTICAL, pspec);
+  obj_props[PROP_VERTICAL] =
+    g_param_spec_boolean ("vertical",
+                          P_("Vertical"),
+                          P_("Whether the layout should be vertical, "
+                             "rather than horizontal"),
+                          FALSE,
+                          G_PARAM_READWRITE |
+                          G_PARAM_STATIC_STRINGS |
+                          G_PARAM_DEPRECATED);
+
+  /**
+   * ClutterBoxLayout:orientation:
+   *
+   * The orientation of the #ClutterBoxLayout, either horizontal
+   * or vertical
+   *
+   * Since: 1.12
+   */
+  obj_props[PROP_ORIENTATION] =
+    g_param_spec_enum ("orientation",
+                       P_("Orientation"),
+                       P_("The orientation of the layout"),
+                       CLUTTER_TYPE_ORIENTATION,
+                       CLUTTER_ORIENTATION_HORIZONTAL,
+                       G_PARAM_READWRITE |
+                       G_PARAM_STATIC_STRINGS);
 
   /**
    * ClutterBoxLayout:homogeneous:
@@ -1315,13 +1395,13 @@ clutter_box_layout_class_init (ClutterBoxLayoutClass *klass)
    *
    * Since: 1.4
    */
-  pspec = g_param_spec_boolean ("homogeneous",
-                                P_("Homogeneous"),
-                                P_("Whether the layout should be homogeneous, "
-                                   "i.e. all childs get the same size"),
-                                FALSE,
-                                CLUTTER_PARAM_READWRITE);
-  g_object_class_install_property (gobject_class, PROP_HOMOGENEOUS, pspec);
+  obj_props[PROP_HOMOGENEOUS] =
+    g_param_spec_boolean ("homogeneous",
+                          P_("Homogeneous"),
+                          P_("Whether the layout should be homogeneous, "
+                             "i.e. all childs get the same size"),
+                          FALSE,
+                          CLUTTER_PARAM_READWRITE);
 
   /**
    * ClutterBoxLayout:pack-start:
@@ -1331,12 +1411,12 @@ clutter_box_layout_class_init (ClutterBoxLayoutClass *klass)
    *
    * Since: 1.2
    */
-  pspec = g_param_spec_boolean ("pack-start",
-                                P_("Pack Start"),
-                                P_("Whether to pack items at the start of the box"),
-                                FALSE,
-                                CLUTTER_PARAM_READWRITE);
-  g_object_class_install_property (gobject_class, PROP_PACK_START, pspec);
+  obj_props[PROP_PACK_START] =
+    g_param_spec_boolean ("pack-start",
+                          P_("Pack Start"),
+                          P_("Whether to pack items at the start of the box"),
+                          FALSE,
+                          CLUTTER_PARAM_READWRITE);
 
   /**
    * ClutterBoxLayout:spacing:
@@ -1345,68 +1425,81 @@ clutter_box_layout_class_init (ClutterBoxLayoutClass *klass)
    *
    * Since: 1.2
    */
-  pspec = g_param_spec_uint ("spacing",
-                             P_("Spacing"),
-                             P_("Spacing between children"),
-                             0, G_MAXUINT, 0,
-                             CLUTTER_PARAM_READWRITE);
-  g_object_class_install_property (gobject_class, PROP_SPACING, pspec);
+  obj_props[PROP_SPACING] =
+    g_param_spec_uint ("spacing",
+                       P_("Spacing"),
+                       P_("Spacing between children"),
+                       0, G_MAXUINT, 0,
+                       CLUTTER_PARAM_READWRITE);
 
   /**
    * ClutterBoxLayout:use-animations:
    *
    * Whether the #ClutterBoxLayout should animate changes in the
-   * layout properties
+   * layout, overriding the easing state of the children.
    *
    * Since: 1.2
+   *
+   * Deprecated: 1.12: #ClutterBoxLayout will honour the easing state
+   *   of the children when allocating them.
    */
-  pspec = g_param_spec_boolean ("use-animations",
-                                P_("Use Animations"),
-                                P_("Whether layout changes should be animated"),
-                                FALSE,
-                                CLUTTER_PARAM_READWRITE);
-  g_object_class_install_property (gobject_class, PROP_USE_ANIMATIONS, pspec);
+  obj_props[PROP_USE_ANIMATIONS] =
+    g_param_spec_boolean ("use-animations",
+                          P_("Use Animations"),
+                          P_("Whether layout changes should be animated"),
+                          FALSE,
+                          CLUTTER_PARAM_READWRITE);
 
   /**
    * ClutterBoxLayout:easing-mode:
    *
    * The easing mode for the animations, in case
-   * #ClutterBoxLayout:use-animations is set to %TRUE
+   * #ClutterBoxLayout:use-animations is set to %TRUE.
    *
    * The easing mode has the same semantics of #ClutterAnimation:mode: it can
    * either be a value from the #ClutterAnimationMode enumeration, like
    * %CLUTTER_EASE_OUT_CUBIC, or a logical id as returned by
-   * clutter_alpha_register_func()
+   * clutter_alpha_register_func().
    *
-   * The default value is %CLUTTER_EASE_OUT_CUBIC
+   * The default value is %CLUTTER_EASE_OUT_CUBIC.
    *
    * Since: 1.2
+   *
+   * Deprecated: 1.12: The #ClutterBoxLayout will honour the easing state of
+   *   the children when allocating them.
    */
-  pspec = g_param_spec_ulong ("easing-mode",
-                              P_("Easing Mode"),
-                              P_("The easing mode of the animations"),
-                              0, G_MAXULONG,
-                              CLUTTER_EASE_OUT_CUBIC,
-                              CLUTTER_PARAM_READWRITE);
-  g_object_class_install_property (gobject_class, PROP_EASING_MODE, pspec);
+  obj_props[PROP_EASING_MODE] =
+    g_param_spec_ulong ("easing-mode",
+                        P_("Easing Mode"),
+                        P_("The easing mode of the animations"),
+                        0, G_MAXULONG,
+                        CLUTTER_EASE_OUT_CUBIC,
+                        CLUTTER_PARAM_READWRITE);
 
   /**
    * ClutterBoxLayout:easing-duration:
    *
    * The duration of the animations, in case #ClutterBoxLayout:use-animations
-   * is set to %TRUE
+   * is set to %TRUE.
    *
-   * The duration is expressed in milliseconds
+   * The duration is expressed in milliseconds.
    *
    * Since: 1.2
+   *
+   * Deprecated: 1.12: The #ClutterBoxLayout will honour the easing state of
+   *   the children when allocating them.
    */
-  pspec = g_param_spec_uint ("easing-duration",
-                             P_("Easing Duration"),
-                             P_("The duration of the animations"),
-                             0, G_MAXUINT,
-                             500,
-                             CLUTTER_PARAM_READWRITE);
-  g_object_class_install_property (gobject_class, PROP_EASING_DURATION, pspec);
+  obj_props[PROP_EASING_DURATION] =
+    g_param_spec_uint ("easing-duration",
+                       P_("Easing Duration"),
+                       P_("The duration of the animations"),
+                       0, G_MAXUINT,
+                       500,
+                       CLUTTER_PARAM_READWRITE);
+
+  gobject_class->set_property = clutter_box_layout_set_property;
+  gobject_class->get_property = clutter_box_layout_get_property;
+  g_object_class_install_properties (gobject_class, PROP_LAST, obj_props);
 }
 
 static void
@@ -1416,7 +1509,7 @@ clutter_box_layout_init (ClutterBoxLayout *layout)
 
   layout->priv = priv = CLUTTER_BOX_LAYOUT_GET_PRIVATE (layout);
 
-  priv->is_vertical = FALSE;
+  priv->orientation = CLUTTER_ORIENTATION_HORIZONTAL;
   priv->is_homogeneous = FALSE;
   priv->is_pack_start = FALSE;
   priv->spacing = 0;
@@ -1468,14 +1561,7 @@ clutter_box_layout_set_spacing (ClutterBoxLayout *layout,
 
       manager = CLUTTER_LAYOUT_MANAGER (layout);
 
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (manager,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (manager);
+      clutter_layout_manager_layout_changed (manager);
 
       g_object_notify (G_OBJECT (layout), "spacing");
     }
@@ -1508,36 +1594,57 @@ clutter_box_layout_get_spacing (ClutterBoxLayout *layout)
  * the Y axis, instead of horizontally alongside the X axis
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: Use clutter_box_layout_set_orientation() instead.
  */
 void
 clutter_box_layout_set_vertical (ClutterBoxLayout *layout,
                                  gboolean          vertical)
 {
+  ClutterOrientation new_orientation, old_orientation;
+
+  g_return_if_fail (CLUTTER_IS_BOX_LAYOUT (layout));
+
+  old_orientation = layout->priv->orientation;
+  new_orientation = vertical
+                  ? CLUTTER_ORIENTATION_VERTICAL
+                  : CLUTTER_ORIENTATION_HORIZONTAL;
+  clutter_box_layout_set_orientation (layout, new_orientation);
+
+  if (old_orientation != new_orientation)
+    g_object_notify_by_pspec (G_OBJECT (layout), obj_props[PROP_VERTICAL]);
+}
+
+/**
+ * clutter_box_layout_set_orientation:
+ * @layout: a #ClutterBoxLayout
+ * @orientation: the orientation of the #ClutterBoxLayout
+ *
+ * Sets the orientation of the #ClutterBoxLayout layout manager.
+ *
+ * Since: 1.12
+ */
+void
+clutter_box_layout_set_orientation (ClutterBoxLayout   *layout,
+                                    ClutterOrientation  orientation)
+{
   ClutterBoxLayoutPrivate *priv;
+  ClutterLayoutManager *manager;
 
   g_return_if_fail (CLUTTER_IS_BOX_LAYOUT (layout));
 
   priv = layout->priv;
 
-  if (priv->is_vertical != vertical)
-    {
-      ClutterLayoutManager *manager;
+  if (priv->orientation == orientation)
+    return;
 
-      priv->is_vertical = vertical ? TRUE : FALSE;
+  priv->orientation = orientation;
 
-      manager = CLUTTER_LAYOUT_MANAGER (layout);
+  manager = CLUTTER_LAYOUT_MANAGER (layout);
 
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (manager,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (manager);
+  clutter_layout_manager_layout_changed (manager);
 
-      g_object_notify (G_OBJECT (layout), "vertical");
-    }
+  g_object_notify_by_pspec (G_OBJECT (layout), obj_props[PROP_ORIENTATION]);
 }
 
 /**
@@ -1551,13 +1658,34 @@ clutter_box_layout_set_vertical (ClutterBoxLayout *layout,
  *   vertically, and %FALSE otherwise
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: Use clutter_box_layout_get_orientation() instead
  */
 gboolean
 clutter_box_layout_get_vertical (ClutterBoxLayout *layout)
 {
   g_return_val_if_fail (CLUTTER_IS_BOX_LAYOUT (layout), FALSE);
 
-  return layout->priv->is_vertical;
+  return layout->priv->orientation == CLUTTER_ORIENTATION_VERTICAL;
+}
+
+/**
+ * clutter_box_layout_get_orientation:
+ * @layout: a #ClutterBoxLayout
+ *
+ * Retrieves the orientation of the @layout.
+ *
+ * Return value: the orientation of the layout
+ *
+ * Since: 1.12
+ */
+ClutterOrientation
+clutter_box_layout_get_orientation (ClutterBoxLayout *layout)
+{
+  g_return_val_if_fail (CLUTTER_IS_BOX_LAYOUT (layout),
+                        CLUTTER_ORIENTATION_HORIZONTAL);
+
+  return layout->priv->orientation;
 }
 
 /**
@@ -1588,14 +1716,7 @@ clutter_box_layout_set_homogeneous (ClutterBoxLayout *layout,
 
       manager = CLUTTER_LAYOUT_MANAGER (layout);
 
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (manager,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (manager);
+      clutter_layout_manager_layout_changed (manager);
 
       g_object_notify (G_OBJECT (layout), "homogeneous");
     }
@@ -1649,14 +1770,7 @@ clutter_box_layout_set_pack_start (ClutterBoxLayout *layout,
 
       manager = CLUTTER_LAYOUT_MANAGER (layout);
 
-      if (priv->use_animations)
-        {
-          clutter_layout_manager_begin_animation (manager,
-                                                  priv->easing_duration,
-                                                  priv->easing_mode);
-        }
-      else
-        clutter_layout_manager_layout_changed (manager);
+      clutter_layout_manager_layout_changed (manager);
 
       g_object_notify (G_OBJECT (layout), "pack-start");
     }
@@ -1695,6 +1809,11 @@ clutter_box_layout_get_pack_start (ClutterBoxLayout *layout)
  * and sets the layout properties
  *
  * Since: 1.2
+ * Deprecated: 1.12: #ClutterBoxLayout honours #ClutterActor's
+ *   align and expand properties. The preferred way is adding
+ *   the @actor with clutter_actor_add_child() and setting
+ *   #ClutterActor:x-align, #ClutterActor:y-align,
+ *   #ClutterActor:x-expand and #ClutterActor:y-expand
  */
 void
 clutter_box_layout_pack (ClutterBoxLayout    *layout,
@@ -1746,6 +1865,8 @@ clutter_box_layout_pack (ClutterBoxLayout    *layout,
  * inside @layout
  *
  * Since: 1.2
+ * Deprecated: 1.12: #ClutterBoxLayout will honour #ClutterActor's
+ *   #ClutterActor:x-align and #ClutterActor:y-align properies
  */
 void
 clutter_box_layout_set_alignment (ClutterBoxLayout    *layout,
@@ -1800,6 +1921,8 @@ clutter_box_layout_set_alignment (ClutterBoxLayout    *layout,
  * as set using clutter_box_layout_pack() or clutter_box_layout_set_alignment()
  *
  * Since: 1.2
+ * Deprecated: 1.12: #ClutterBoxLayout will honour #ClutterActor's
+ *   #ClutterActor:x-align and #ClutterActor:y-align properies
  */
 void
 clutter_box_layout_get_alignment (ClutterBoxLayout    *layout,
@@ -1858,6 +1981,8 @@ clutter_box_layout_get_alignment (ClutterBoxLayout    *layout,
  * inside @layout
  *
  * Since: 1.2
+ * Deprecated: 1.12: #ClutterBoxLayout will honour #ClutterActor's
+ *   #ClutterActor:x-align and #ClutterActor:y-align properies
  */
 void
 clutter_box_layout_set_fill (ClutterBoxLayout *layout,
@@ -1912,6 +2037,8 @@ clutter_box_layout_set_fill (ClutterBoxLayout *layout,
  * as set using clutter_box_layout_pack() or clutter_box_layout_set_fill()
  *
  * Since: 1.2
+ * Deprecated: 1.12: #ClutterBoxLayout will honour #ClutterActor's
+ *   #ClutterActor:x-align and #ClutterActor:y-align properies
  */
 void
 clutter_box_layout_get_fill (ClutterBoxLayout *layout,
@@ -1968,6 +2095,8 @@ clutter_box_layout_get_fill (ClutterBoxLayout *layout,
  * Sets whether @actor should expand inside @layout
  *
  * Since: 1.2
+ * Deprecated: 1.12: #ClutterBoxLayout will honour #ClutterActor's
+ *   #ClutterActor:x-expand and #ClutterActor:y-expand properies
  */
 void
 clutter_box_layout_set_expand (ClutterBoxLayout *layout,
@@ -2020,6 +2149,8 @@ clutter_box_layout_set_expand (ClutterBoxLayout *layout,
  * Return value: %TRUE if the #ClutterActor should expand, %FALSE otherwise
  *
  * Since: 1.2
+ * Deprecated: 1.12: #ClutterBoxLayout will honour #ClutterActor's
+ *   #ClutterActor:x-expand and #ClutterActor:y-expand properies
  */
 gboolean
 clutter_box_layout_get_expand (ClutterBoxLayout *layout,
@@ -2070,9 +2201,16 @@ clutter_box_layout_get_expand (ClutterBoxLayout *layout,
  *
  * The duration of the animations is controlled by
  * clutter_box_layout_set_easing_duration(); the easing mode to be used
- * by the animations is controlled by clutter_box_layout_set_easing_mode()
+ * by the animations is controlled by clutter_box_layout_set_easing_mode().
+ *
+ * Enabling animations will override the easing state of each child
+ * of the actor using @layout, and will use the #ClutterBoxLayout:easing-mode
+ * and #ClutterBoxLayout:easing-duration properties instead.
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: The layout manager will honour the easing state
+ *   of the children when allocating them.
  */
 void
 clutter_box_layout_set_use_animations (ClutterBoxLayout *layout,
@@ -2096,13 +2234,13 @@ clutter_box_layout_set_use_animations (ClutterBoxLayout *layout,
  * clutter_box_layout_get_use_animations:
  * @layout: a #ClutterBoxLayout
  *
- * Retrieves whether @layout should animate changes in the layout properties
- *
- * Since clutter_box_layout_set_use_animations()
+ * Retrieves whether @layout should animate changes in the layout properties.
  *
  * Return value: %TRUE if the animations should be used, %FALSE otherwise
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12
  */
 gboolean
 clutter_box_layout_get_use_animations (ClutterBoxLayout *layout)
@@ -2119,12 +2257,12 @@ clutter_box_layout_get_use_animations (ClutterBoxLayout *layout)
  *   from clutter_alpha_register_func()
  *
  * Sets the easing mode to be used by @layout when animating changes in layout
- * properties
- *
- * Use clutter_box_layout_set_use_animations() to enable and disable the
- * animations
+ * properties.
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: The layout manager will honour the easing state
+ *   of the children when allocating them.
  */
 void
 clutter_box_layout_set_easing_mode (ClutterBoxLayout *layout,
@@ -2153,6 +2291,8 @@ clutter_box_layout_set_easing_mode (ClutterBoxLayout *layout,
  * Return value: an easing mode
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12
  */
 gulong
 clutter_box_layout_get_easing_mode (ClutterBoxLayout *layout)
@@ -2169,12 +2309,12 @@ clutter_box_layout_get_easing_mode (ClutterBoxLayout *layout)
  * @msecs: the duration of the animations, in milliseconds
  *
  * Sets the duration of the animations used by @layout when animating changes
- * in the layout properties
- *
- * Use clutter_box_layout_set_use_animations() to enable and disable the
- * animations
+ * in the layout properties.
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: The layout manager will honour the easing state
+ *   of the children when allocating them.
  */
 void
 clutter_box_layout_set_easing_duration (ClutterBoxLayout *layout,
@@ -2203,6 +2343,8 @@ clutter_box_layout_set_easing_duration (ClutterBoxLayout *layout,
  * Return value: the duration of the animations, in milliseconds
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12
  */
 guint
 clutter_box_layout_get_easing_duration (ClutterBoxLayout *layout)

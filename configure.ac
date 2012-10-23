@@ -9,7 +9,7 @@
 # - increase clutter_micro_version to the next odd number
 # - increase clutter_interface_version to the next odd number
 m4_define([clutter_major_version], [1])
-m4_define([clutter_minor_version], [9])
+m4_define([clutter_minor_version], [13])
 m4_define([clutter_micro_version], [1])
 
 # • for stable releases: increase the interface age by 1 for each release;
@@ -54,7 +54,7 @@ AC_INIT([clutter],
         [http://www.clutter-project.org])
 
 AC_CONFIG_SRCDIR([clutter/clutter.h])
-AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_HEADERS([clutter/config.h])
 AC_CONFIG_AUX_DIR([build])
 AC_CONFIG_MACRO_DIR([build/autotools])
 
@@ -77,10 +77,20 @@ CLUTTER_LT_REV=lt_revision
 CLUTTER_LT_AGE=lt_age
 CLUTTER_LT_VERSION="$CLUTTER_LT_CURRENT:$CLUTTER_LT_REV:$CLUTTER_LT_AGE"
 CLUTTER_LT_LDFLAGS="-version-info $CLUTTER_LT_VERSION"
+AC_SUBST([CLUTTER_LT_CURRENT],  [lt_current])
+AC_SUBST([CLUTTER_LT_REVISION], [lt_revision])
+AC_SUBST([CLUTTER_LT_VERSION],  [$CLUTTER_LT_VERSION])
 
 AC_PROG_SED
 
+dnl = Preliminary platform checks =============================================
+
 AC_CANONICAL_HOST
+
+platform_win32=no
+platform_quartz=no
+platform_linux=no
+
 AC_MSG_CHECKING([if building for some Win32 platform])
 AS_CASE([$host],
         [*-*-mingw*|*-*-cygwin*],
@@ -89,18 +99,30 @@ AS_CASE([$host],
           platform_win32=yes
         ],
 
-        [platform_win32=no]
+        [*-*-linux*],
+        [
+          platform_linux=yes
+        ],
+
+        []
 )
 AC_MSG_RESULT([$platform_win32])
+
 AM_CONDITIONAL(OS_WIN32, [test "$platform_win32" = "yes"])
 
 AC_CHECK_HEADER([OpenGL/gl.h], [platform_quartz=yes], [platform_quartz=no])
 AM_CONDITIONAL(OS_QUARTZ, [test "$platform_quartz" = "yes"])
 
-AC_SUBST(CLUTTER_LT_VERSION)
+AC_CHECK_HEADER([GL/glx.h], [platform_glx=yes], [platform_glx=no])
+AC_CHECK_LIB([GL], [glXCreateContext], [platform_glx=yes], [platform_glx=no])
+AM_CONDITIONAL(OS_GLX, [test "$platform_glx" = "yes"])
+AM_CONDITIONAL(OS_LINUX, [test "$platform_linux" = "yes"])
+
 AC_SUBST(CLUTTER_LT_LDFLAGS)
 
-dnl ========================================================================
+AC_CACHE_SAVE
+
+dnl = Dependencies =========================================================
 
 # Checks for programs.
 AM_PROG_CC_C_O
@@ -113,17 +135,18 @@ LT_INIT([disable-static])
 AC_HEADER_STDC
 
 # required versions for dependencies
-m4_define([glib_req_version],           [2.31.0])
-m4_define([cogl_req_version],           [1.8.0])
+m4_define([glib_req_version],           [2.31.19])
+m4_define([cogl_req_version],           [1.9.6])
 m4_define([json_glib_req_version],      [0.12.0])
-m4_define([atk_req_version],            [2.1.5])
+m4_define([atk_req_version],            [2.5.3])
 m4_define([cairo_req_version],          [1.10])
-m4_define([pango_req_version],          [1.20])
+m4_define([pango_req_version],          [1.30])
 m4_define([gi_req_version],             [0.9.5])
 m4_define([uprof_req_version],          [0.3])
 m4_define([gtk_doc_req_version],        [1.15])
 m4_define([xfixes_req_version],         [3])
 m4_define([xcomposite_req_version],     [0.4])
+m4_define([gdk_req_version],            [3.3.18])
 
 AC_SUBST([GLIB_REQ_VERSION],       [glib_req_version])
 AC_SUBST([COGL_REQ_VERSION],       [cogl_req_version])
@@ -136,6 +159,7 @@ AC_SUBST([UPROF_REQ_VERSION],      [uprof_req_version])
 AC_SUBST([GTK_DOC_REQ_VERSION],    [gtk_doc_req_version])
 AC_SUBST([XFIXES_REQ_VERSION],     [xfixes_req_version])
 AC_SUBST([XCOMPOSITE_REQ_VERSION], [xcomposite_req_version])
+AC_SUBST([GDK_REQ_VERSION],        [gdk_req_version])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AM_PATH_GLIB_2_0([glib_req_version],
@@ -167,269 +191,308 @@ AC_ARG_ENABLE([Bsymbolic],
 AS_IF([test "x$enable_Bsymbolic" = "xyes"], [CLUTTER_LINK_FLAGS=-Wl[,]-Bsymbolic-functions])
 AC_SUBST(CLUTTER_LINK_FLAGS)
 
-dnl ========================================================================
+AC_CACHE_SAVE
 
-# defaults
-AS_IF([test "x$platform_win32" = "xyes"],  [CLUTTER_FLAVOUR=win32],
-      [test "x$platform_quartz" = "xyes"], [CLUTTER_FLAVOUR=osx],
-      [CLUTTER_FLAVOUR=glx])
+dnl ========================================================================
 
 FLAVOUR_LIBS=""
 FLAVOUR_CFLAGS=""
-CLUTTER_WINSYS_BASE=
-CLUTTER_WINSYS_BASE_LIB=
-CLUTTER_WINSYS=
+CLUTTER_BACKENDS=""
+CLUTTER_INPUT_BACKENDS=""
+CLUTTER_CONFIG_DEFINES=
 
 experimental_backend=no
-
-AC_ARG_WITH([flavour],
-            [AS_HELP_STRING([--with-flavour=@<:@glx/opengl-egl-xlib/wayland/eglx/eglnative/osx/win32/cex100@:>@],
-                            [Select the Clutter window system backend])],
-            [CLUTTER_FLAVOUR=$with_flavour])
+experimental_input_backend=no
 
 # base dependencies for core
 CLUTTER_BASE_PC_FILES="cogl-1.0 >= $COGL_REQ_VERSION cairo-gobject >= $CAIRO_REQ_VERSION atk >= $ATK_REQ_VERSION pangocairo >= $PANGO_REQ_VERSION cogl-pango-1.0 json-glib-1.0 >= $JSON_GLIB_REQ_VERSION"
 
+# private base dependencies
+CLUTTER_BASE_PC_FILES_PRIVATE=""
+
 # backend specific pkg-config files
 BACKEND_PC_FILES=""
 
+# private backend specific dependencies
+BACKEND_PC_FILES_PRIVATE=""
+
 dnl === Clutter windowing system backend ======================================
 
-AS_CASE([$CLUTTER_FLAVOUR],
+AC_ARG_ENABLE([x11-backend],
+              [AS_HELP_STRING([--enable-x11-backend=@<:@yes/no@:>@], [Enable the X11 backend (default=check)])],
+              [enable_x11=$enableval],
+              [enable_x11=check])
+AC_ARG_ENABLE([win32-backend],
+              [AS_HELP_STRING([--enable-win32-backend=@<:@yes/no@:>@], [Enable the Windows backend (default=check)])],
+              [enable_win32=$enableval],
+              [enable_win32=check])
+AC_ARG_ENABLE([quartz-backend],
+              [AS_HELP_STRING([--enable-quartz-backend=@<:@yes/no@:>@], [Enable the OS X backend (default=check)])],
+              [enable_osx=$enableval],
+              [enable_osx=check])
+AC_ARG_ENABLE([gdk-backend],
+              [AS_HELP_STRING([--enable-gdk-backend=@<:@yes/no@:>@], [Enable the GDK backend (default=check)])],
+              [enable_gdk=$enableval],
+              [enable_gdk=check])
+AC_ARG_ENABLE([wayland-backend],
+              [AS_HELP_STRING([--enable-wayland-backend=@<:@yes/no@:>@], [Enable the Wayland client backend (default=no)])],
+              [enable_wayland=$enableval],
+              [enable_wayland=no])
+AC_ARG_ENABLE([egl-backend],
+              [AS_HELP_STRING([--enable-egl-backend=@<:@yes/no@:>@], [Enable the EGL framebuffer backend (default=no)])],
+              [enable_egl=$enableval],
+              [enable_egl=no])
+AC_ARG_ENABLE([cex100-backend],
+              [AS_HELP_STRING([--enable-cex100-backend=@<:@yes/no@:>@], [Enable the CEx100 backend (default=no)])],
+              [enable_cex100=$enableval],
+              [enable_cex100=no])
 
-        [glx],
-        [
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_GLX"
-
-          SUPPORT_X11=1
-          SUPPORT_XLIB=1
-          SUPPORT_GLX=1
-
-          CLUTTER_WINSYS=cogl
-          CLUTTER_WINSYS_BASE=x11
-          CLUTTER_WINSYS_BASE_LIB="x11/libclutter-x11.la"
-          CLUTTER_SONAME_INFIX=glx
-
-          # Mesa 7.3 added a GL pkg-config file, finally
-          PKG_CHECK_EXISTS([gl],
-                           [BACKEND_PC_FILES="$BACKEND_PC_FILES gl"],
-                           # if a pkg-config file isn't found just add -lGL
-                           # and hope for the best.
-                           [FLAVOUR_LIBS="$FLAVOUR_LIBS -lGL"])
-
-          # We might fall back to DRM for sync-to-vblank on GLX
-          PKG_CHECK_EXISTS([libdrm],
-                           [
-                             AC_DEFINE([HAVE_DRM], [1], [Have libdrm support])
-                             BACKEND_PC_FILES="$BACKEND_PC_FILES libdrm"
-                           ],
-                           [])
-        ],
-
-        [opengl-egl-xlib],
-        [
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_EGL"
-          CLUTTER_EGL_BACKEND="generic"
-
-          SUPPORT_X11=1
-          SUPPORT_XLIB=1
-          SUPPORT_EGL=1
-          SUPPORT_EGL_PLATFORM_POWERVR_X11=1
-
-          CLUTTER_WINSYS=cogl
-          CLUTTER_WINSYS_BASE=x11
-          CLUTTER_WINSYS_BASE_LIB="x11/libclutter-x11.la"
-          # I think this winsys can be API and ABI compatible with the
-          # glx flavour so we can also be cheeky and use the same soname
-          CLUTTER_SONAME_INFIX=glx
-
-          PKG_CHECK_EXISTS([gl], [BACKEND_PC_FILES="$BACKEND_PC_FILES gl"], [])
-          PKG_CHECK_EXISTS([egl], [BACKEND_PC_FILES="$BACKEND_PC_FILES egl"], [])
-        ],
-
-        [wayland],
-        [
-          experimental_backend="yes"
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_WAYLAND"
-
-          SUPPORT_WAYLAND=1
-
-          CLUTTER_WINSYS=wayland
-          CLUTTER_SONAME_INFIX=wayland
-
-          PKG_CHECK_EXISTS([gl], [BACKEND_PC_FILES="$BACKEND_PC_FILES gl"], [])
-          PKG_CHECK_EXISTS([egl], [BACKEND_PC_FILES="$BACKEND_PC_FILES egl"], [])
-          PKG_CHECK_EXISTS([wayland-client xkbcommon],
-			   [BACKEND_PC_FILES="$BACKEND_PC_FILES wayland-client xkbcommon"], [])
-        ],
-
-        [eglx],
-        [
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_EGL"
-          CLUTTER_EGL_BACKEND="generic"
-
-          SUPPORT_X11=1
-          SUPPORT_XLIB=1
-          SUPPORT_EGL=1
-          SUPPORT_EGL_PLATFORM_POWERVR_X11=1
-
-          CLUTTER_WINSYS=cogl
-          CLUTTER_WINSYS_BASE=x11
-          CLUTTER_WINSYS_BASE_LIB="x11/libclutter-x11.la"
-          CLUTTER_SONAME_INFIX=eglx
-        ],
-
-        [eglnative],
-        [
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_EGL"
-          CLUTTER_EGL_BACKEND="generic"
-
-          SUPPORT_EGL=1
-          SUPPORT_EGL_PLATFORM_POWERVR_NULL=1
-
-          PKG_CHECK_MODULES(TSLIB, [tslib-1.0], [have_tslib=yes], [have_tslib=no])
-          AS_IF([test "x$have_tslib" = "xyes"],
-                [AC_DEFINE([HAVE_TSLIB], [1], [Have tslib for touchscreen handling])]
-          )
-
-          # evdev
-          PKG_CHECK_MODULES(EVDEV, [gudev-1.0 xkbcommon],
-                            [have_evdev=yes], [have_evdev=no])
-          AS_IF([test "x$have_evdev" = "xyes"],
-                [AC_DEFINE([HAVE_EVDEV], 1,
-                           [Have evdev support for input handling])]
-          )
-
-          # Make sure we don't enable tslib and evdev at the same time, we
-          # don't support multiple event backends yet.
-          AS_IF([test "x$have_tslib" = "xyes" -a "x$have_evdev" = "xyes"],
-                [AC_MSG_ERROR([Cannot enable both tslib and evdev events])])
-
-          FLAVOUR_LIBS="$FLAVOUR_LIBS $TSLIB_LIBS $EVDEV_LIBS"
-          FLAVOUR_CFLAGS="$FLAVOUR_CFLAGS $TSLIB_CFLAGS $EVDEV_CFLAGS"
-
-          CLUTTER_WINSYS=cogl
-          CLUTTER_SONAME_INFIX=eglnative
-        ],
-
-        [cex100],
-        [
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_EGL"
-          CLUTTER_EGL_BACKEND="cex100"
-
-          SUPPORT_EGL=1
-          SUPPORT_EGL_PLATFORM_GDL=1
-
-          # The cex100 is a small specialization of the EGL backend
-          CLUTTER_WINSYS=cogl
-          CLUTTER_SONAME_INFIX=cex100
-
-          found_gdl=no
-          AC_CHECK_HEADERS([libgdl.h], [found_gdl=yes])
-          AS_IF([test "x$found_gdl" = "xno"],
-                [AC_CHECK_HEADERS([CE4100/libgdl.h],
-                                  [
-                                    FLAVOUR_CFLAGS="-I/usr/include/CE4100"
-                                    found_gdl=yes
-                                    CLUTTER_CEX100_LIBGDL_PREFIX=CE4100/
-                                  ])
-                ])
-          AC_SUBST(CLUTTER_CEX100_LIBGDL_PREFIX)
-
-          AS_IF([test x"$found_gdl" = "xno"], [AC_MSG_ERROR([libgdl.h not found])])
-
-          # evdev
-          PKG_CHECK_MODULES(EVDEV, [gudev-1.0 xkbcommon],
-                            [have_evdev=yes], [have_evdev=no])
-          AS_IF([test "x$have_evdev" = "xyes"],
-                [AC_DEFINE([HAVE_EVDEV], 1,
-                           [Have evdev support for input handling])]
-          )
-
-          FLAVOUR_CFLAGS="$FLAVOUR_CFLAGS $EVDEV_CFLAGS"
-          FLAVOUR_LIBS="$FLAVOUR_LIBS -lgdl $EVDEV_LIBS"
-        ],
-
-        [osx],
-        [
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_OSX"
-
-          AC_DEFINE([HAVE_CLUTTER_OSX], [1], [Have the OSX backend])
-
-          FLAVOUR_LIBS="$FLAVOUR_LIBS -framework Cocoa -framework OpenGL"
-
-          CLUTTER_WINSYS=osx
-          CLUTTER_SONAME_INFIX=osx
-        ],
-
-        [win32],
-        [
-          CLUTTER_STAGE_TYPE="CLUTTER_TYPE_STAGE_WIN32"
-          AC_DEFINE([HAVE_CLUTTER_WIN32], [1], [Have the Win32 backend])
-
-          FLAVOUR_LIBS="$FLAVOUR_LIBS -lopengl32 -lgdi32 -lwinmm"
-          FLAVOUR_CFLAGS="$FLAVOUR_CFLAGS -D_WIN32_WINNT=0x0500"
-
-          AC_CHECK_TOOL(WINDRES, windres, no)
-          if test "$WINDRES" = no; then
-             AC_MSG_ERROR([*** windres is required])
-          fi
-
-          CLUTTER_WINSYS=win32
-          CLUTTER_SONAME_INFIX=win32
-        ],
-
-        [AC_MSG_ERROR([Invalid backend for Clutter])]
-)
-
-AS_IF([test "x$SUPPORT_X11" = "x1"],
+dnl Define default values
+AS_IF([test "x$enable_x11" = "xcheck"],
       [
-        # we use fontconfig API and pango-fc when the fontconfig
-        # configuration changes
+        AS_IF([test "x$platform_glx" = "xyes"], [enable_x11=yes], [enable_x11=no])
+      ])
+
+AS_IF([test "x$enable_win32" = "xcheck"],
+      [
+        AS_IF([test "x$platform_win32" = "xyes"], [enable_win32=yes], [enable_win32=no])
+      ])
+
+AS_IF([test "x$enable_osx" = "xcheck"],
+      [
+        AS_IF([test "x$platform_quartz" = "xyes"], [enable_osx=yes], [enable_osx=no])
+      ])
+
+AS_IF([test "x$enable_gdk" = "xcheck"],
+      [
+        PKG_CHECK_EXISTS([gdk-3.0 >= gdk_req_version], [enable_gdk=yes], [enable_gdk=no])
+      ])
+
+dnl Per-backend rules
+AS_IF([test "x$enable_x11" = "xyes"],
+      [
+        CLUTTER_BACKENDS="$CLUTTER_BACKENDS x11"
+        CLUTTER_INPUT_BACKENDS="$CLUTTER_INPUT_BACKENDS x11"
+
+        SUPPORT_X11=1
+        SUPPORT_GLX=1
+        SUPPORT_COGL=1
+
+        # we use fontconfig API and pango-ft2 when the fontconfig
+        # configuration changes; we don't expose any API for this
+        # so we add pango-ft2 to the private Requires.
         PKG_CHECK_EXISTS([pangoft2],
                          [
                            AC_DEFINE([HAVE_PANGO_FT2], [1], [Supports PangoFt2])
-                           BACKEND_PC_FILES="$BACKEND_PC_FILES pangoft2"
+                           BACKEND_PC_FILES_PRIVATE="$BACKEND_PC_FILES_PRIVATE pangoft2"
                          ],
                          [])
-      ])
 
-AS_IF([test "x$SUPPORT_GLX" = "x1"],
-      [
         AC_DEFINE([HAVE_CLUTTER_GLX], [1], [Have the GLX backend])
       ])
 
-AS_IF([test "x$SUPPORT_WAYLAND" = "x1"],
+AS_IF([test "x$enable_gdk" = "xyes"],
       [
-        AC_DEFINE([HAVE_CLUTTER_WAYLAND], [1], [Have the Wayland backend])
+        CLUTTER_BACKENDS="$CLUTTER_BACKENDS gdk"
+        CLUTTER_INPUT_BACKENDS="$CLUTTER_INPUT_BACKENDS gdk"
+
+	SUPPORT_GDK=1
+        SUPPORT_COGL=1
+
+	BACKEND_PC_FILES="$BACKEND_PC_FILES gdk-3.0"
       ])
 
-AS_IF([test "x$SUPPORT_EGL" = "x1"],
+AS_IF([test "x$enable_wayland" = "xyes"],
       [
+        CLUTTER_BACKENDS="$CLUTTER_BACKENDS wayland"
+        CLUTTER_INPUT_BACKENDS="$CLUTTER_INPUT_BACKENDS wayland"
+
+        experimental_backend="yes"
+
+        SUPPORT_WAYLAND=1
+
+        PKG_CHECK_EXISTS([wayland-client wayland-cursor xkbcommon gdk-pixbuf-2.0],
+                         [
+                            BACKEND_PC_FILES="$BACKEND_PC_FILES wayland-cursor wayland-client xkbcommon"
+                            BACKEND_PC_FILES_PRIVATE="$BACKEND_PC_FILES_PRIVATE gdk-pixbuf-2.0"
+                         ],
+                         [])
+
+        AC_DEFINE([HAVE_CLUTTER_WAYLAND], [1], [Have the Wayland client backend])
+      ])
+
+dnl Note this is orthogonal to the client side support and you can
+dnl use the Wayland compositor features with any of the clutter
+dnl backends with corresponding Cogl support.
+AC_ARG_ENABLE([wayland-compositor],
+              [AS_HELP_STRING([--enable-wayland-compositor=@<:@yes/no@:>@],
+                              [Enable Wayland compositor features (default=no)])],
+              [],
+              [AS_IF([test "x$SUPPORT_EGL" = "x1"],
+                     [enable_wayland_compositor=yes],
+                     [enable_wayland_compositor=no])
+              ])
+
+AS_IF([test "x$enable_wayland_compositor" = "xyes"],
+      [
+        PKG_CHECK_EXISTS([wayland-server],
+			 [BACKEND_PC_FILES="$BACKEND_PC_FILES wayland-server"], [])
+        SUPPORT_WAYLAND_COMPOSITOR=1
+	CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
+#define CLUTTER_HAS_WAYLAND_COMPOSITOR_SUPPORT 1"
+        AC_DEFINE([HAVE_CLUTTER_WAYLAND_COMPOSITOR], [1], [Have Wayland compositor support])
+      ])
+
+AM_CONDITIONAL(SUPPORT_WAYLAND_COMPOSITOR, [test "x$SUPPORT_WAYLAND_COMPOSITOR" = "x1"])
+
+AS_IF([test "x$enable_wayland_compositor" != "xyes" -a "x$enable_wayland" != "xyes"],
+      [
+        # The wayland headers introduce so much symbol shadowing that build
+        # logs become incomprehensible with -Wshadow so we only use it for
+        # non-wayland builds.
+	MAINTAINER_COMPILER_FLAGS="-Wshadow"
+      ])
+
+AS_IF([test "x$enable_cex100" = "xyes"],
+      [
+        CLUTTER_BACKENDS="$CLUTTER_BACKENDS cex100"
+
+        experimental_backend="yes"
+
+        SUPPORT_COGL=1
+        SUPPORT_CEX100=1
+
+        have_gdl=no
+        AC_CHECK_HEADERS([libgdl.h], [have_gdl=yes])
+
+        AS_IF([test "x$have_gdl" = "xno"],
+              [
+                AC_CHECK_HEADERS([CE4100/libgdl.h],
+                                 [
+                                   FLAVOUR_CFLAGS="-I/usr/include/CE4100"
+                                   have_gdl=yes
+                                   CLUTTER_CEX100_LIBGDL_PREFIX=CE4100/
+                                 ])
+              ])
+
+        AS_IF([test "x$have_gdl" = "xno"],
+              [AC_MSG_ERROR([libgdl.h not found but the CEx100 backend has been explicitly enabled])])
+
+        AC_SUBST(CLUTTER_CEX100_LIBGDL_PREFIX)
+
+        FLAVOUR_LIBS="$FLAVOUR_LIBS -lgdl"
+
+        AC_DEFINE([CLUTTER_EGL_BACKEND_CEX100], [1], [Use CEX100 EGL backend])
+        AC_DEFINE([CLUTTER_EGL_BACKEND_GENERIC], [1], [Use Generic EGL backend])
         AC_DEFINE([HAVE_CLUTTER_EGL], [1], [Have the EGL backend])
       ])
 
-AS_IF([test "x$CLUTTER_EGL_BACKEND" = "xgeneric"],
-      AC_DEFINE([CLUTTER_EGL_BACKEND_GENERIC], [1], [Use Generic EGL backend]))
+AS_IF([test "x$enable_egl" = "xyes"],
+      [
+        CLUTTER_BACKENDS="$CLUTTER_BACKENDS egl"
 
-AS_IF([test "x$CLUTTER_EGL_BACKEND" = "xcex100"],
-      AC_DEFINE([CLUTTER_EGL_BACKEND_CEX100], [1], [Use CEX100 EGL backend]))
+        experimental_backend="yes"
 
-# winsys conditionals for use in automake files...
-AM_CONDITIONAL(SUPPORT_GLX, [test "x$SUPPORT_GLX" = "x1"])
-AM_CONDITIONAL(SUPPORT_X11, [test "x$SUPPORT_X11" = "x1"])
-AM_CONDITIONAL(SUPPORT_XLIB, [test "x$SUPPORT_XLIB" = "x1"])
-AM_CONDITIONAL(SUPPORT_EGL, [test "x$SUPPORT_EGL" = "x1"])
-AM_CONDITIONAL(SUPPORT_OSX, [test "x$CLUTTER_WINSYS" = "xosx"])
-AM_CONDITIONAL(SUPPORT_WIN32, [test "x$CLUTTER_WINSYS" = "xwin32"])
-AM_CONDITIONAL(SUPPORT_CEX100, [test "x$SUPPORT_EGL_PLATFORM_GDL" = "x1"])
-AM_CONDITIONAL(SUPPORT_WAYLAND, [test "x$CLUTTER_WINSYS" = "xwayland"])
-AM_CONDITIONAL(SUPPORT_STUB, [test "x$CLUTTER_WINSYS" = "xwin32" -o \
-                                   "x$CLUTTER_WINSYS" = "xosx" -o \
-                                   "x$CLUTTER_WINSYS" = "xwayland"])
+        SUPPORT_EGL=1
+        SUPPORT_COGL=1
 
+        FLAVOUR_LIBS="$FLAVOUR_LIBS $TSLIB_LIBS $EVDEV_LIBS"
+        FLAVOUR_CFLAGS="$FLAVOUR_CFLAGS $TSLIB_CFLAGS $EVDEV_CFLAGS"
+
+        AC_DEFINE([CLUTTER_EGL_BACKEND_GENERIC], [1], [Use Generic EGL backend])
+
+        AC_DEFINE([HAVE_CLUTTER_EGL], [1], [Have the EGL backend])
+      ])
+
+AS_IF([test "x$enable_osx" = "xyes"],
+      [
+        CLUTTER_BACKENDS="$CLUTTER_BACKENDS osx"
+        CLUTTER_INPUT_BACKENDS="$CLUTTER_INPUT_BACKENDS osx"
+
+        AC_DEFINE([HAVE_CLUTTER_OSX], [1], [Have the OSX backend])
+
+        FLAVOUR_LIBS="$FLAVOUR_LIBS -framework Cocoa -framework OpenGL"
+
+        SUPPORT_OSX=1
+      ])
+
+AS_IF([test "x$enable_win32" = "xyes"],
+      [
+        CLUTTER_BACKENDS="$CLUTTER_BACKENDS win32"
+        CLUTTER_INPUT_BACKENDS="$CLUTTER_INPUT_BACKENDS win32"
+
+        AC_DEFINE([HAVE_CLUTTER_WIN32], [1], [Have the Win32 backend])
+
+        FLAVOUR_LIBS="$FLAVOUR_LIBS -lopengl32 -lgdi32 -lwinmm"
+        FLAVOUR_CFLAGS="$FLAVOUR_CFLAGS -D_WIN32_WINNT=0x0500"
+
+        AC_CHECK_TOOL(WINDRES, [windres], [AC_MSG_ERROR([*** windres is required])])
+
+        SUPPORT_WIN32=1
+      ])
+
+AS_IF([test "x$CLUTTER_BACKENDS" = "x"],
+      [
+        AC_MSG_ERROR([No backend enabled. You need to enable at least one backend.])
+      ])
+
+AS_IF([test "x$platform_linux" = "xyes"],
+      [
+        AC_DEFINE([OS_LINUX], [1], [Define to 1 if building for Linux])
+      ])
+
+# additional input backends
+
+AC_ARG_ENABLE([tslib-input],
+              [AS_HELP_STRING([--enable-tslib-input=@<:@yes/no@:>@], [Enable TSLib for input events (default=no)])],
+              [enable_tslib=$enableval],
+              [enable_tslib=no])
+AC_ARG_ENABLE([evdev-input],
+              [AS_HELP_STRING([--enable-evdev-input=@<:@yes/no@:>@], [Enable evdev for input events (default=no)])],
+              [enable_evdev=$enableval],
+              [enable_evdev=no])
+
+AS_IF([test "x$enable_tslib" = "xyes"],
+      [
+        PKG_CHECK_MODULES(TSLIB, [tslib-1.0], [have_tslib=yes], [have_tslib=no])
+        AS_IF([test "x$have_tslib" = "xyes"],
+              [
+                CLUTTER_INPUT_BACKENDS="$CLUTTER_INPUT_BACKENDS tslib"
+                experimental_input_backend="yes"
+                AC_DEFINE([HAVE_TSLIB], [1], [Have tslib for touchscreen handling])
+                SUPPORT_TSLIB=1
+              ])
+      ])
+
+AS_IF([test "x$enable_evdev" = "xyes"],
+      [
+        PKG_CHECK_MODULES(EVDEV, [gudev-1.0 xkbcommon], [have_evdev=yes], [have_evdev=no])
+        AS_IF([test "x$have_evdev" = "xyes"],
+              [
+                CLUTTER_INPUT_BACKENDS="$CLUTTER_INPUT_BACKENDS evdev"
+                BACKEND_PC_FILES="$BACKEND_PC_FILES gudev-1.0 xkbcommon"
+                experimental_input_backend="yes"
+                AC_DEFINE([HAVE_EVDEV], [1], [Have evdev support for input handling])
+                SUPPORT_EVDEV=1
+              ])
+      ])
+
+# conditionals for use in automake files...
+AM_CONDITIONAL(SUPPORT_GLX,     [test "x$SUPPORT_GLX" = "x1"])
+AM_CONDITIONAL(SUPPORT_X11,     [test "x$SUPPORT_X11" = "x1"])
+AM_CONDITIONAL(SUPPORT_GDK,     [test "x$SUPPORT_GDK" = "x1"])
+AM_CONDITIONAL(SUPPORT_EGL,     [test "x$SUPPORT_EGL" = "x1"])
+AM_CONDITIONAL(SUPPORT_OSX,     [test "x$SUPPORT_OSX" = "x1"])
+AM_CONDITIONAL(SUPPORT_WIN32,   [test "x$SUPPORT_WIN32" = "x1"])
+AM_CONDITIONAL(SUPPORT_CEX100,  [test "x$SUPPORT_CEX100" = "x1"])
+AM_CONDITIONAL(SUPPORT_WAYLAND, [test "x$SUPPORT_WAYLAND" = "x1"])
+
+AM_CONDITIONAL(USE_COGL,  [test "x$SUPPORT_COGL" = "x1"])
 AM_CONDITIONAL(USE_TSLIB, [test "x$have_tslib" = "xyes"])
-AM_CONDITIONAL(SUPPORT_EVDEV, [test "x$have_evdev" = "xyes"])
+AM_CONDITIONAL(USE_EVDEV, [test "x$have_evdev" = "xyes"])
+AM_CONDITIONAL(USE_GLD,   [test "x$have_gdl" = "xyes"])
+
+AM_CONDITIONAL(NEED_XKB_UTILS, [test "x$have_evdev" = "xyes" -o "x$SUPPORT_WAYLAND" = "x1"])
 
 dnl Instead of using AM_CFLAGS to ensure
 dnl COGL_ENABLE_EXPERIMENTAL_2_0_API is defined while compiling clutter
@@ -438,61 +501,77 @@ dnl other tools such as glib-mkenums and gir-scanner don't end up
 dnl using the define also.
 AC_DEFINE([COGL_ENABLE_EXPERIMENTAL_2_0_API], [1], [Can use Cogl 2.0 API internally])
 
+dnl strip leading spaces
+CLUTTER_BACKENDS=${CLUTTER_BACKENDS#* }
+AC_SUBST(CLUTTER_BACKENDS)
+
+CLUTTER_INPUT_BACKENDS=${CLUTTER_INPUT_BACKENDS#* }
+AC_SUBST(CLUTTER_INPUT_BACKENDS)
+
+AC_CACHE_SAVE
+
 dnl === Clutter configuration =================================================
 
-CLUTTER_CONFIG_DEFINES=
-
 # windowing systems
-AS_IF([test "x$SUPPORT_XLIB" = "x1"],
+AS_IF([test "x$SUPPORT_X11" = "x1"],
       [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
-#define CLUTTER_WINDOWING_X11 1"])
+#define CLUTTER_WINDOWING_X11 \"x11\"
+#define CLUTTER_INPUT_X11 \"x11\""])
+AS_IF([test "x$SUPPORT_GDK" = "x1"],
+      [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
+#define CLUTTER_WINDOWING_GDK \"gdk\"
+#define CLUTTER_INPUT_GDK \"gdk\""])
 AS_IF([test "x$SUPPORT_GLX" = "x1"],
       [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
-#define CLUTTER_WINDOWING_GLX 1"])
+#define CLUTTER_WINDOWING_GLX \"glx\""])
 AS_IF([test "x$SUPPORT_EGL" = "x1"],
       [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
-#define CLUTTER_WINDOWING_EGL 1"])
-AS_IF([test "x$CLUTTER_WINSYS" = "xwayland"],
+#define CLUTTER_WINDOWING_EGL \"eglnative\""])
+AS_IF([test "x$SUPPORT_WAYLAND" = "x1"],
       [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
-#define CLUTTER_WINDOWING_WAYLAND 1"])
-AS_IF([test "x$CLUTTER_WINSYS" = "xosx"],
+#define CLUTTER_WINDOWING_WAYLAND \"wayland\""])
+AS_IF([test "x$SUPPORT_OSX" = "x1"],
       [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
-#define CLUTTER_WINDOWING_OSX 1"])
-AS_IF([test "x$CLUTTER_WINSYS" = "xwin32"],
+#define CLUTTER_WINDOWING_OSX \"osx\"
+#define CLUTTER_INPUT_OSX \"osx\""])
+AS_IF([test "x$SUPPORT_WIN32" = "x1"],
       [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
-#define CLUTTER_WINDOWING_WIN32 1"])
-AS_IF([test "x$SUPPORT_EGL_PLATFORM_GDL" = "x1"],
+#define CLUTTER_WINDOWING_WIN32 \"win32\"
+#define CLUTTER_INPUT_WIN32 \"win32\""])
+AS_IF([test "x$SUPPORT_CEX100" = "x1"],
       [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
-#define CLUTTER_WINDOWING_CEX100 1"])
+#define CLUTTER_WINDOWING_CEX100 \"cex100\""])
+AS_IF([test "x$SUPPORT_EVDEV" = "x1"],
+      [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
+#define CLUTTER_INPUT_EVDEV \"evdev\""])
+AS_IF([test "x$SUPPORT_TSLIB" = "x1"],
+      [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
+#define CLUTTER_INPUT_TSLIB \"tslib\""])
+AS_IF([test "x$SUPPORT_WAYLAND" = "x1"],
+      [CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
+#define CLUTTER_INPUT_WAYLAND \"wayland\""])
+
+# the 'null' input backend is special
+CLUTTER_CONFIG_DEFINES="$CLUTTER_CONFIG_DEFINES
+#define CLUTTER_INPUT_NULL \"null\""
 
 AC_SUBST([CLUTTER_CONFIG_DEFINES])
 
-dnl === Clutter substitutions =================================================
-# Eventually the idea of a winsys should be hidden from Clutter and moved
-# into Cogl, but for now we have CLUTTER_WINSYS...
-AC_SUBST([CLUTTER_WINSYS])
-# The same goes for the winsys-base...
-AC_SUBST([CLUTTER_WINSYS_BASE])
-AC_SUBST([CLUTTER_WINSYS_BASE_LIB])
-AC_SUBST(CLUTTER_STAGE_TYPE)
-AC_SUBST(CLUTTER_SONAME_INFIX)
-
-CLUTTER_WINSYS_LIB=libclutter-$CLUTTER_SONAME_INFIX-$CLUTTER_API_VERSION.la
-AC_SUBST([CLUTTER_WINSYS_LIB])
-
 dnl === Clutter substitutions kept for backwards compatibility ================
-AC_SUBST([CLUTTER_FLAVOUR])
-CLUTTER_COGL=undefined
-AC_SUBST([CLUTTER_COGL])
-
-dnl === Image loading backend =================================================
-IMAGE_PC_FILES=""
+AC_SUBST([CLUTTER_WINSYS],       [deprecated])
+AC_SUBST([CLUTTER_WINSYS_BASE],  [deprecated])
+AC_SUBST([CLUTTER_STAGE_TYPE],   [deprecated])
+AC_SUBST([CLUTTER_SONAME_INFIX], [deprecated])
+AC_SUBST([CLUTTER_FLAVOUR],      [deprecated])
+AC_SUBST([CLUTTER_COGL],         [deprecated])
+AC_SUBST([COGL_DRIVER],          [deprecated])
 
 dnl === X11 checks, only for X11-based backends ===============================
 X11_PC_FILES=""
+X11_EXTS=""
 x11_tests=no
 
-AS_IF([test "x$SUPPORT_XLIB" = "x1"],
+AS_IF([test "x$SUPPORT_X11" = "x1"],
       [
         # base X11 includes and libraries
         AC_MSG_CHECKING([for X11])
@@ -537,6 +616,7 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
 
                 X11_LIBS="$X11_LIBS -lXext"
                 X11_PC_FILES="$X11_PC_FILES xext"
+                X11_EXTS="$X11_EXTS xext"
 
                 AC_MSG_RESULT([found])
               ],
@@ -552,6 +632,7 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
 
                 X11_LIBS="$X11_LIBS -lXfixes"
                 X11_PC_FILES="$X11_PC_FILES xfixes >= $XFIXES_REQ_VERSION"
+                X11_EXTS="$X11_EXTS xfixes"
 
                 AC_MSG_RESULT([found])
               ],
@@ -567,6 +648,7 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
 
                 X11_LIBS="$X11_LIBS -lXdamage"
                 X11_PC_FILES="$X11_PC_FILES xdamage"
+                X11_EXTS="$X11_EXTS xdamage"
 
                 AC_MSG_RESULT([found])
               ],
@@ -582,6 +664,7 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
 
                 X11_LIBS="$X11_LIBS -lXcomposite"
                 X11_PC_FILES="$X11_PC_FILES xcomposite >= $XCOMPOSITE_REQ_VERSION"
+                X11_EXTS="$X11_EXTS xcomposite"
 
                 AC_MSG_RESULT([found])
               ],
@@ -600,6 +683,7 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
                       [
                         AC_DEFINE([HAVE_XGE], [1], [Define to 1 if X Generic Extensions is available])
                         have_xge=yes
+                        X11_EXTS="$X11_EXTS xge"
                       ])
 
         CPPFLAGS="$clutter_save_CPPFLAGS"
@@ -637,8 +721,27 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
                                                [Define to 1 if XInput is available])
                                    ])
 
+                  clutter_save_LIBS="$LIBS"
+                  LIBS="$LIBS -lXi"
+
+                  AC_CHECK_FUNC([XIAllowTouchEvents],
+                                [
+                                  AC_CHECK_MEMBER([XIScrollClassInfo.number],
+                                                  [
+                                                    have_xinput_2_2=yes
+                                                    AC_DEFINE([HAVE_XINPUT_2_2], [1], [Define to 1 if XInput 2.2 is available])
+                                                  ],
+                                                  [have_xinput_2_2=no],
+                                                  [[#include <X11/extensions/XInput2.h>]])])
+
+                  LIBS="$clutter_save_LIBS"
+
                   X11_LIBS="$X11_LIBS $XINPUT_LIBS"
                   X11_PC_FILES="$X11_PC_FILES xi"
+
+                  AS_IF([test "x$have_xinput_2_2" = "xyes"],
+                        [X11_EXTS="$X11_EXTS xi2.2"],
+                        [X11_EXTS="$X11_EXTS xi2.0"])
                 ],
 
                 [no],
@@ -660,6 +763,8 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
                       [
                         AC_DEFINE(HAVE_XKB, 1, [Define to use XKB extension])
                         have_xkb=yes
+
+                        X11_EXTS="$X11_EXTS xkb"
                       ])
 
         CPPFLAGS="$clutter_save_CPPFLAGS"
@@ -673,7 +778,38 @@ AS_IF([test "x$SUPPORT_XLIB" = "x1"],
 )
 
 AM_CONDITIONAL([BUILD_XI2], [test "x$have_xinput2" = "xyes"])
-AM_CONDITIONAL(X11_TESTS, [test "x$x11_tests" = "xyes"])
+AM_CONDITIONAL([X11_TESTS], [test "x$x11_tests" = "xyes"])
+
+X11_EXTS=${X11_EXTS#* }
+
+AC_CACHE_SAVE
+
+dnl === Enable GDK-Pixbuf in tests ============================================
+
+m4_define([pixbuf_default], [yes])
+AC_ARG_ENABLE([gdk-pixbuf],
+              [AS_HELP_STRING([--enable-gdk-pixbuf=@<:@no/yes@:>@],
+                              [Enable tests using GDK-Pixbuf @<:@default=]pixbuf_default[@:>@])],
+              [enable_pixbuf=$enable_val],
+              [enable_pixbuf=pixbuf_default])
+
+AS_CASE([$enable_pixbuf],
+
+        [yes],
+        [
+          PKG_CHECK_MODULES([GDK_PIXBUF], [gdk-pixbuf-2.0])
+          AC_SUBST(GDK_PIXBUF_CFLAGS)
+          AC_SUBST(GDK_PIXBUF_LIBS)
+          pixbuf_tests=yes
+        ],
+
+        [no],
+        [
+          pixbuf_tests=no
+        ]
+)
+
+AM_CONDITIONAL([PIXBUF_TESTS], [test "x$pixbuf_tests" = "xyes"])
 
 dnl === Enable debug level ====================================================
 
@@ -721,29 +857,18 @@ AS_CASE([$enable_deprecated],
 
         [no],
         [
-          CLUTTER_DEPRECATED_CFLAGS="-DG_DISABLE_SINGLE_INCLUDES -DCOGL_DISABLE_DEPRECATED -DCLUTTER_DISABLE_DEPRECATED"
+          CLUTTER_DEPRECATED_CFLAGS="-DG_DISABLE_SINGLE_INCLUDES -DCOGL_DISABLE_DEPRECATED"
         ],
 
         [yes],
         [
-          CLUTTER_DEPRECATED_CFLAGS="-DGLIB_DISABLE_DEPRECATION_WARNINGS -DCLUTTER_DISABLE_DEPRECATION_WARNINGS"
+          CLUTTER_DEPRECATED_CFLAGS="-DGLIB_DISABLE_DEPRECATION_WARNINGS"
         ],
 
         [AC_MSG_ERROR([Unknown argument for --enable-deprecated])]
 )
 
 AC_SUBST([CLUTTER_DEPRECATED_CFLAGS])
-
-
-dnl === Conformance test suite ================================================
-
-AC_ARG_ENABLE([conformance],
-              [AS_HELP_STRING([--enable-conformance=@<:@no/yes@:>@],
-                              [Build conformance test suite @<:@default=yes@:>@])],
-              [],
-              [enable_conformance=yes])
-
-AM_CONDITIONAL([BUILD_TESTS], [test "x$enable_conformance" = "xyes"])
 
 dnl === Profiling =============================================================
 
@@ -783,36 +908,6 @@ AM_CONDITIONAL(PROFILE, test "x$enable_profile" != "xno")
 AC_SUBST(CLUTTER_PROFILE_CFLAGS)
 AC_SUBST(CLUTTER_PROFILE_LDFLAGS)
 
-dnl === Coverage report =======================================================
-
-AC_PATH_PROG([GCOV], [gcov], [enable_gcov=no])
-
-AC_MSG_CHECKING([whether to build with gcov testing])
-
-AC_ARG_ENABLE([gcov],
-              [AS_HELP_STRING([--enable-gcov],
-                              [Whether to enable coverage testing (requires gcc
-and gcov)])],
-              [],
-              [enable_gcov=no])
-
-AS_IF([test "x$enable_gcov" = "xyes" && test "x$GCC" = "xyes"],
-      [
-        AS_IF([test "x$enable_conformance" = "xno"],
-              [AC_MSG_WARN([Conformance test suite is disabled, the coverage report will be incomplete])],
-              [AC_MSG_RESULT([yes])]
-        )
-
-        GCOV_CFLAGS="-g -O0 -fprofile-arcs -ftest-coverage"
-        GCOV_LDFLAGS="-lgcov"
-      ],
-      [AC_MSG_RESULT([no])]
-)
-
-AM_CONDITIONAL([GCOV_ENABLED], [test "x$enable_gcov" = "xyes"])
-AC_SUBST([GCOV_CFLAGS])
-AC_SUBST([GCOV_LDFLAGS])
-
 dnl === Enable strict compiler flags ==========================================
 
 # use strict compiler flags only when building from git; the rules for
@@ -824,11 +919,21 @@ AC_ARG_ENABLE([maintainer-flags],
               [],
               [enable_maintainer_flags=maintainer_flags_default])
 
-MAINTAINER_COMPILER_FLAGS="-Wall -Wshadow -Wcast-align -Wuninitialized
-                           -Wno-strict-aliasing -Wempty-body -Wformat
-                           -Wformat-security -Winit-self
-                           -Wdeclaration-after-statement -Wvla
-                           -Wpointer-arith"
+MAINTAINER_COMPILER_FLAGS="$MAINTAINER_COMPILER_FLAGS
+                           -Wall
+                           -Wcast-align
+                           -Wuninitialized
+                           -Wno-strict-aliasing
+                           -Werror=pointer-arith
+                           -Werror=missing-declarations
+                           -Werror=redundant-decls
+                           -Werror=empty-body
+                           -Werror=format
+                           -Werror=format-security
+                           -Werror=format-nonliteral
+                           -Werror=init-self
+                           -Werror=declaration-after-statement
+                           -Werror=vla"
 
 AS_CASE([$enable_maintainer_flags],
         [yes],
@@ -858,15 +963,104 @@ dnl === Dependencies, compiler flags and linker libraries =====================
 # strip leading space
 BACKEND_PC_FILES=${BACKEND_PC_FILES#* }
 
-CLUTTER_REQUIRES="$CLUTTER_BASE_PC_FILES $IMAGE_PC_FILES $BACKEND_PC_FILES"
+# public dependencies, will fill the Requires: field of clutter.pc
+CLUTTER_REQUIRES="$CLUTTER_BASE_PC_FILES $BACKEND_PC_FILES"
 PKG_CHECK_MODULES(CLUTTER_DEPS, [$CLUTTER_REQUIRES])
-AC_SUBST(CLUTTER_REQUIRES)
 
-CLUTTER_CFLAGS="$FLAVOUR_CFLAGS $CLUTTER_DEPS_CFLAGS $CLUTTER_PROFILE_CFLAGS $GLIB_CFLAGS"
-CLUTTER_LIBS="$FLAVOUR_LIBS $CLUTTER_DEPS_LIBS $CLUTTER_PROFILE_LDFLAGS $GLIB_LIBS"
+# private dependencies, will fill the Requires.private: field of clutter.pc
+AS_IF([test "x$CLUTTER_BASE_PC_FILES_PRIVATE" = "x" && test "x$BACKEND_PC_FILES_PRIVATE" = "x"],
+      [
+        CLUTTER_REQUIRES_PRIVATE=""
+        CLUTTER_DEPS_PRIVATE_CFLAGS=""
+        CLUTTER_DEPS_PRIVATE_LIBS=""
+      ],
+      [
+        CLUTTER_REQUIRES_PRIVATE="$CLUTTER_BASE_PC_FILES_PRIVATE $BACKEND_PC_FILES_PRIVATE"
+        PKG_CHECK_MODULES(CLUTTER_DEPS_PRIVATE, [$CLUTTER_REQUIRES_PRIVATE])
+      ])
+
+AC_SUBST(CLUTTER_REQUIRES)
+AC_SUBST(CLUTTER_REQUIRES_PRIVATE)
+
+CLUTTER_CFLAGS="$FLAVOUR_CFLAGS $CLUTTER_DEPS_CFLAGS $CLUTTER_DEPS_PRIVATE_CFLAGS $CLUTTER_PROFILE_CFLAGS $GLIB_CFLAGS"
+CLUTTER_LIBS="$FLAVOUR_LIBS $CLUTTER_DEPS_LIBS $CLUTTER_DEPS_PRIVATE_LIBS $CLUTTER_PROFILE_LDFLAGS $GLIB_LIBS"
 AC_SUBST(CLUTTER_CFLAGS)
 AC_SUBST(CLUTTER_LIBS)
 
+dnl === Test coverage =========================================================
+
+AC_ARG_ENABLE([gcov],
+              [AS_HELP_STRING([--enable-gcov], [Enable gcov])],
+              [use_gcov=$enableval],
+              [use_gcov=no])
+
+AS_IF([test "x$use_gcov" = "xyes"],
+      [
+        dnl we need gcc:
+        AS_IF([test "$GCC" != "yes"], [AC_MSG_ERROR([GCC is required for --enable-gcov])])
+
+        dnl Check if ccache is being used
+        AC_CHECK_PROG(SHTOOL, shtool, shtool)
+        AS_CASE([`$SHTOOL path $CC`],
+                [*ccache*], [gcc_ccache=yes],
+                [gcc_ccache=no])
+
+        if test "$gcc_ccache" = "yes" && (test -z "$CCACHE_DISABLE" || test "$CCACHE_DISABLE" != "1"); then
+          AC_MSG_ERROR([ccache must be disabled when --enable-gcov option is used. You can disable ccache by setting environment variable CCACHE_DISABLE=1.])
+        fi
+
+        ltp_version_list="1.6 1.7 1.8 1.9"
+        AC_CHECK_PROG(LTP, lcov, lcov)
+        AC_CHECK_PROG(LTP_GENHTML, genhtml, genhtml)
+
+        if test "$LTP"; then
+          AC_CACHE_CHECK([for ltp version], clutter_cv_ltp_version,
+                         [
+                           clutter_cv_ltp_version=invalid
+                           ltp_version=`$LTP -v 2>/dev/null | $SED -e 's/^.* //'`
+                           for ltp_check_version in $ltp_version_list; do
+                             if test "$ltp_version" = "$ltp_check_version"; then
+                               clutter_cv_ltp_version="$ltp_check_version (ok)"
+                             fi
+                           done
+                         ])
+        else
+          ltp_msg="To enable code coverage reporting you must have one of the following LTP versions installed: $ltp_version_list"
+          AC_MSG_ERROR([$ltp_msg])
+        fi
+
+        case $clutter_cv_ltp_version in
+          ""|invalid[)]
+          ltp_msg="You must have one of the following versions of LTP: $ltp_version_list (found: $ltp_version)."
+          AC_MSG_ERROR([$ltp_msg])
+          LTP="exit 0;"
+          ;;
+        esac
+
+        if test -z "$LTP_GENHTML"; then
+          AC_MSG_ERROR([Could not find genhtml from the LTP package])
+        fi
+
+        AC_DEFINE(HAVE_GCOV, 1, [Whether you have gcov])
+
+        dnl Remove all optimization flags from CFLAGS
+        changequote({,})
+        CFLAGS=`echo "$CFLAGS" | $SED -e 's/-O[0-9]*//g'`
+        CLUTTER_CFLAGS=`echo "$CLUTTER_CFLAGS" | $SED -e 's/-O[0-9]*//g'`
+        changequote([,])
+
+        dnl Define the special gcc flags
+        CLUTTER_GCOV_CFLAGS="-O0 -fprofile-arcs -ftest-coverage"
+        CLUTTER_GCOV_LDADD="-lgcov"
+
+        AC_SUBST(CLUTTER_GCOV_CFLAGS)
+        AC_SUBST(CLUTTER_GCOV_LDADD)
+
+        CLUTTER_CFLAGS="$CLUTTER_CFLAGS $CLUTTER_GCOV_CFLAGS"
+        CLUTTER_LIBS="$CLUTTER_LIBS $CLUTTER_GCOV_LDADD"
+      ])
+
+AM_CONDITIONAL(ENABLE_GCOV, test "x$use_gcov" = "xyes")
 
 dnl === GObject-Introspection check ===========================================
 
@@ -939,25 +1133,49 @@ AC_DEFINE_UNQUOTED([GETTEXT_PACKAGE],
                    [The prefix for our gettext translation domains.])
 AS_ALL_LINGUAS
 
+dnl = Build optionals =========================================================
+
+dnl === Conformance test suite ================================================
+
+AC_ARG_ENABLE([conformance],
+              [AS_HELP_STRING([--disable-conformance], [Whether the conformance tests should be built])],
+              [],
+              [enable_conformance=yes])
+
+AC_ARG_ENABLE([tests],
+              [AS_HELP_STRING([--disable-tests], [Whether tests should be built])],
+              [],
+              [enable_tests=yes])
+AM_CONDITIONAL(BUILD_TESTS, [test "x$enable_tests" = "xyes" && test "x$enable_conformance" = "xyes"])
+
+AC_ARG_ENABLE([examples],
+              [AS_HELP_STRING([--disable-examples], [Whether examples should be built])],
+              [],
+              [enable_examples=yes])
+AM_CONDITIONAL(BUILD_EXAMPLES, [test "x$enable_examples" = "xyes"])
+
 dnl ===========================================================================
 
 AC_CONFIG_FILES([
 	Makefile
-
         README
 
 	build/Makefile
 	build/autotools/Makefile
 	build/mingw/Makefile
+	build/win32/Makefile
+	build/win32/vs9/Makefile
+	build/win32/vs10/Makefile
 
 	clutter/Makefile
+	clutter/config.h.win32
         clutter/clutter-config.h
 	clutter/clutter-version.h
 	clutter/clutter-$CLUTTER_API_VERSION.pc:clutter/clutter.pc.in
 
 	clutter/cally/cally-$CLUTTER_API_VERSION.pc:clutter/cally/cally.pc.in
 
-	clutter/cogl/clutter-cex100.h
+	clutter/cex100/clutter-cex100.h
 
 	tests/Makefile
 	tests/accessibility/Makefile
@@ -968,6 +1186,8 @@ AC_CONFIG_FILES([
 	tests/interactive/wrapper.sh
 	tests/micro-bench/Makefile
 	tests/performance/Makefile
+
+        examples/Makefile
 
 	doc/Makefile
 	doc/reference/Makefile
@@ -996,8 +1216,6 @@ echo " • Global:"
 echo "        Prefix: ${prefix}"
 echo "        Libdir: ${libdir}"
 echo "        Sysconfdir: ${sysconfdir}"
-echo "        Flavour: ${CLUTTER_WINSYS}"
-echo "        Target library: ${CLUTTER_WINSYS_LIB}"
 
 # Compiler/Debug related flags
 echo ""
@@ -1005,7 +1223,7 @@ echo " • Compiler options:"
 echo "        Clutter debug level: ${enable_debug}"
 echo "        Compiler flags: ${CFLAGS} ${MAINTAINER_CFLAGS}"
 echo "        Profiling enabled: ${enable_profile}"
-echo "        Enable coverage tests: ${enable_gcov}"
+echo "        Enable coverage tests: ${use_gcov}"
 echo "        Enable deprecated symbols: ${enable_deprecated}"
 
 # Documentation
@@ -1018,25 +1236,44 @@ echo "        Build Additional Documentation: ${enable_docs} (Generate PDF: ${en
 echo ""
 echo " • Extra:"
 echo "        Build introspection data: ${enable_introspection}"
-echo "        Build conformance test suite: ${enable_conformance}"
+echo "        Build test suites: ${enable_tests}"
+if test "x$enable_tests" = "xyes"; then
+echo "        Build X11-specific tests: ${x11_tests}"
+echo "        Build tests using GDK-Pixbuf: ${pixbuf_tests}"
+fi
+echo "        Build examples: ${enable_examples}"
 
 # Clutter backend related flags
 echo ""
-echo " • Clutter Backend:"
+echo " • Clutter Backends:"
 
 if test "x$experimental_backend" = "xno"; then
-echo "        Windowing system: ${CLUTTER_WINSYS}"
+echo "        Windowing systems: ${CLUTTER_BACKENDS}"
 else
-echo "        Windowing system: ${CLUTTER_WINSYS} (WARNING: Experimental)"
+echo "        Windowing systems: ${CLUTTER_BACKENDS} (WARNING: Experimental backends enabled)"
 fi
 
-if test "x$SUPPORT_XLIB" = "x1"; then
-echo "        Enable XComposite: ${have_xcomposite}"
-echo "        Enable XInput: ${have_xinput}"
-echo "        Enable Xge: ${have_xge}"
-echo "        Enable XI2: ${have_xinput2}"
-echo "        Enable XKB: ${have_xkb}"
-echo "        Enable X11 tests: ${x11_tests}"
+if test "x$experimental_input_backend" = "xno"; then
+echo "        Input backends: ${CLUTTER_INPUT_BACKENDS}"
+else
+echo "        Input backends: ${CLUTTER_INPUT_BACKENDS} (WARNING: Experimental backends enabled)"
+fi
+
+if test "x$SUPPORT_X11" = "x1"; then
+echo ""
+echo "     - X11 backend options:"
+echo "        Enabled extensions: ${X11_EXTS}"
+fi
+
+if test "x$SUPPORT_CEX100" = "x1"; then
+echo ""
+echo "     - CEx100 backend options (WARNING: Experimental):"
+echo "        libGDL include prefix: ${CLUTTER_CEX100_LIBGDL_PREFIX}"
+fi
+
+if test "x$SUPPORT_WAYLAND_COMPOSITOR" = "x1"; then
+echo ""
+echo "     - Wayland compositor support enabled (WARNING: Experimental)"
 fi
 
 echo ""
@@ -1044,11 +1281,13 @@ echo ""
 # General warning about experimental features
 if test "x$experimental_backend" = "xyes"; then
 echo ""
-echo "☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠"
-echo " *WARNING*"
+echo "☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠"
+echo "*WARNING* *WARNING* *WARNING* *WARNING* *WARNING* *WARNING* *WARNING*"
 echo ""
 echo "  The stability of your build might be affected by one or more"
 echo "  experimental backends or experimental and unsupported features"
-echo "☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠"
+echo ""
+echo "*WARNING* *WARNING* *WARNING* *WARNING* *WARNING* *WARNING* *WARNING*"
+echo "☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠☠"
 echo ""
 fi

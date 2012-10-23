@@ -29,6 +29,8 @@
 #endif
 
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/mman.h>
 #include <wayland-util.h>
 #include <wayland-client.h>
 
@@ -37,70 +39,55 @@
 #include "clutter-event-private.h"
 #include "clutter-private.h"
 #include "clutter-keysyms.h"
-#include "clutter-xkb-utils.h"
+#include "evdev/clutter-xkb-utils.h"
+#include "clutter-input-device-wayland.h"
+#include "clutter-backend-wayland.h"
+#include "clutter-stage-private.h"
+#include "clutter-wayland.h"
 
-#include "clutter-stage-wayland.h"
-
-#define CLUTTER_TYPE_INPUT_DEVICE_WAYLAND       (clutter_input_device_wayland_get_type ())
-#define CLUTTER_INPUT_DEVICE_WAYLAND(obj)       (G_TYPE_CHECK_INSTANCE_CAST ((obj), CLUTTER_TYPE_INPUT_DEVICE_WAYLAND, ClutterInputDeviceWayland))
-#define CLUTTER_IS_INPUT_DEVICE_WAYLAND(obj)    (G_TYPE_CHECK_INSTANCE_TYPE ((obj), CLUTTER_TYPE_INPUT_DEVICE_WAYLAND))
-
-typedef struct _ClutterInputDeviceWayland           ClutterInputDeviceWayland;
-
-GType clutter_input_device_wayland_get_type (void) G_GNUC_CONST;
+#include "cogl/clutter-stage-cogl.h"
 
 typedef struct _ClutterInputDeviceClass         ClutterInputDeviceWaylandClass;
 
-struct _ClutterInputDeviceWayland
-{
-  ClutterInputDevice      device;
-  struct wl_input_device *input_device;
-  ClutterStageWayland    *pointer_focus;
-  ClutterStageWayland    *keyboard_focus;
-  uint32_t                modifier_state;
-  int32_t                 x, y, surface_x, surface_y;
-  struct xkb_desc        *xkb;
-};
+#define clutter_input_device_wayland_get_type \
+    _clutter_input_device_wayland_get_type
 
 G_DEFINE_TYPE (ClutterInputDeviceWayland,
                clutter_input_device_wayland,
                CLUTTER_TYPE_INPUT_DEVICE);
 
 static void
-clutter_backend_wayland_handle_motion (void *data,
-				       struct wl_input_device *input_device,
-				       uint32_t _time,
-				       int32_t x, int32_t y,
-				       int32_t sx, int32_t sy)
+clutter_wayland_handle_motion (void *data,
+                               struct wl_pointer *pointer,
+                               uint32_t _time,
+                               wl_fixed_t x, wl_fixed_t y)
 {
   ClutterInputDeviceWayland *device = data;
-  ClutterStageWayland       *stage_wayland = device->pointer_focus;
+  ClutterStageCogl          *stage_cogl = device->pointer_focus;
   ClutterEvent              *event;
 
   event = clutter_event_new (CLUTTER_MOTION);
-  event->motion.stage = stage_wayland->wrapper;
+  event->motion.stage = stage_cogl->wrapper;
   event->motion.device = CLUTTER_INPUT_DEVICE (device);
   event->motion.time = _time;
   event->motion.modifier_state = 0;
-  event->motion.x = sx;
-  event->motion.y = sy;
+  event->motion.x = wl_fixed_to_double(x);
+  event->motion.y = wl_fixed_to_double(y);
 
-  device->surface_x = sx;
-  device->surface_y = sy;
-  device->x = x;
-  device->y = y;
+  device->x = event->motion.x;
+  device->y = event->motion.y;
 
   _clutter_event_push (event, FALSE);
 }
 
 static void
-clutter_backend_wayland_handle_button (void *data,
-				       struct wl_input_device *input_device,
-				       uint32_t _time,
-				       uint32_t button, uint32_t state)
+clutter_wayland_handle_button (void *data,
+                               struct wl_pointer *pointer,
+                               uint32_t serial, uint32_t _time,
+                               uint32_t button, uint32_t state)
 {
   ClutterInputDeviceWayland *device = data;
-  ClutterStageWayland       *stage_wayland = device->pointer_focus;
+  ClutterStageCogl          *stage_cogl = device->pointer_focus;
   ClutterEvent              *event;
   ClutterEventType           type;
 
@@ -110,12 +97,13 @@ clutter_backend_wayland_handle_button (void *data,
     type = CLUTTER_BUTTON_RELEASE;
 
   event = clutter_event_new (type);
-  event->button.stage = stage_wayland->wrapper;
+  event->button.stage = stage_cogl->wrapper;
   event->button.device = CLUTTER_INPUT_DEVICE (device);
-  event->button.time = _time;
-  event->button.x = device->surface_x;
-  event->button.y = device->surface_y;
-  event->button.modifier_state = device->modifier_state;
+  event->button.time = /*_time*/ serial;
+  event->button.x = device->x;
+  event->button.y = device->y;
+  event->button.modifier_state =
+    xkb_state_serialize_mods (device->xkb, XKB_STATE_EFFECTIVE);
 
   /* evdev button codes */
   switch (button) {
@@ -134,171 +122,432 @@ clutter_backend_wayland_handle_button (void *data,
 }
 
 static void
-clutter_backend_wayland_handle_key (void *data,
-				    struct wl_input_device *input_device,
-				    uint32_t _time,
-				    uint32_t key, uint32_t state)
+clutter_wayland_handle_axis (void *data,
+                             struct wl_pointer *pointer,
+                             uint32_t time,
+                             uint32_t axis,
+                             wl_fixed_t value)
 {
   ClutterInputDeviceWayland *device = data;
-  ClutterStageWayland       *stage_wayland = device->keyboard_focus;
+  ClutterStageCogl          *stage_cogl = device->pointer_focus;
   ClutterEvent              *event;
+  gdouble                    delta_x, delta_y;
 
-  event = _clutter_key_event_new_from_evdev ((ClutterInputDevice *) device,
-                                             stage_wayland->wrapper,
-                                             device->xkb,
-                                             _time, key, state,
-                                             &device->modifier_state);
+  event = clutter_event_new (CLUTTER_SCROLL);
+  event->scroll.time = time;
+  event->scroll.stage = stage_cogl->wrapper;
+  event->scroll.direction = CLUTTER_SCROLL_SMOOTH;
+  event->scroll.x = device->x;
+  event->scroll.y = device->y;
+
+  if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL)
+    {
+      delta_x = -wl_fixed_to_double(value) * 23;
+      delta_y = 0;
+    }
+  else
+    {
+      delta_x = 0;
+      delta_y = -wl_fixed_to_double(value) * 23; /* XXX: based on my bcm5794 */
+    }
+  clutter_event_set_scroll_delta (event, delta_x, delta_y);
+
+  event->scroll.modifier_state =
+    xkb_state_serialize_mods(device->xkb, XKB_STATE_EFFECTIVE);
 
   _clutter_event_push (event, FALSE);
 }
 
 static void
-clutter_backend_wayland_handle_pointer_focus (void *data,
-					      struct wl_input_device *input_device,
-					      uint32_t _time,
-					      struct wl_surface *surface,
-					      int32_t x, int32_t y, int32_t sx, int32_t sy)
+clutter_wayland_handle_keymap (void *data,
+                               struct wl_keyboard *keyboard,
+                               uint32_t format,
+                               int32_t fd,
+                               uint32_t size)
 {
   ClutterInputDeviceWayland *device = data;
-  ClutterStageWayland       *stage_wayland;
-  ClutterEvent              *event;
+  struct xkb_context *ctx;
+  struct xkb_keymap *keymap;
+  char *map_str;
 
-  if (device->pointer_focus)
+  if (device->xkb)
     {
-      stage_wayland = device->pointer_focus;
-
-      event = clutter_event_new (CLUTTER_LEAVE);
-      event->crossing.stage = stage_wayland->wrapper;
-      event->crossing.time = _time;
-      event->crossing.x = sx;
-      event->crossing.y = sy;
-      event->crossing.source = CLUTTER_ACTOR (stage_wayland->wrapper);
-      event->crossing.device = CLUTTER_INPUT_DEVICE (device);
-
-      _clutter_event_push (event, FALSE);
-
-      device->pointer_focus = NULL;
-      _clutter_input_device_set_stage (CLUTTER_INPUT_DEVICE (device), NULL);
+      xkb_state_unref (device->xkb);
+      device->xkb = NULL;
     }
 
-  if (surface)
+  ctx = xkb_context_new (0);
+  if (!ctx)
     {
-      stage_wayland = wl_surface_get_user_data (surface);
+      close (fd);
+      return;
+    }
 
-      device->pointer_focus = stage_wayland;
-      _clutter_input_device_set_stage (CLUTTER_INPUT_DEVICE (device),
-				       stage_wayland->wrapper);
+  if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+    {
+      close (fd);
+      return;
+    }
 
-      event = clutter_event_new (CLUTTER_MOTION);
-      event->motion.time = _time;
-      event->motion.x = sx;
-      event->motion.y = sy;
-      event->motion.modifier_state = device->modifier_state;
-      event->motion.source = CLUTTER_ACTOR (stage_wayland->wrapper);
-      event->motion.device = CLUTTER_INPUT_DEVICE (device);
+  map_str = mmap (NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+  if (map_str == MAP_FAILED)
+    {
+      close(fd);
+      return;
+    }
 
-      _clutter_event_push (event, FALSE);
+  keymap = xkb_map_new_from_string (ctx,
+                                    map_str,
+                                    XKB_KEYMAP_FORMAT_TEXT_V1,
+                                    0);
+  xkb_context_unref (ctx);
+  munmap (map_str, size);
+  close (fd);
 
-      device->surface_x = sx;
-      device->surface_y = sy;
-      device->x = x;
-      device->y = y;
+  if (!keymap)
+    {
+      g_warning ("failed to compile keymap\n");
+      return;
+    }
 
-      /* Revert back to default pointer for now. */
-      wl_input_device_attach (input_device, _time, NULL, 0, 0);
+  device->xkb = xkb_state_new(keymap);
+  xkb_map_unref (keymap);
+  if (!device->xkb)
+    {
+      g_warning ("failed to create XKB state object\n");
+      return;
+    }
+}
+
+/* XXX: Need a wl_keyboard event to harmonise these across clients. */
+#define KEY_REPEAT_DELAY 660
+#define KEY_REPEAT_INTERVAL 40
+
+static gboolean
+clutter_wayland_repeat_key (void *data)
+{
+  ClutterInputDeviceWayland *device = data;
+  ClutterStageCogl          *stage_cogl = device->keyboard_focus;
+  ClutterEvent              *event;
+
+  event = _clutter_key_event_new_from_evdev ((ClutterInputDevice *) device,
+                                             stage_cogl->wrapper,
+                                             device->xkb,
+                                             device->repeat_time,
+                                             device->repeat_key,
+                                             1);
+  device->repeat_time += KEY_REPEAT_INTERVAL;
+  _clutter_event_push (event, FALSE);
+
+  if (!device->is_initial_repeat)
+    return TRUE;
+
+  g_source_remove (device->repeat_source);
+  device->repeat_source = g_timeout_add (KEY_REPEAT_INTERVAL,
+                                         clutter_wayland_repeat_key,
+                                         device);
+  device->is_initial_repeat = FALSE;
+
+  return FALSE;
+}
+
+static void
+clutter_wayland_handle_key (void *data,
+                            struct wl_keyboard *keyboard,
+                            uint32_t serial, uint32_t _time,
+                            uint32_t key, uint32_t state)
+{
+  ClutterInputDeviceWayland *device = data;
+  ClutterStageCogl          *stage_cogl = device->keyboard_focus;
+  ClutterEvent              *event;
+
+  if (!device->xkb)
+    return;
+
+  event = _clutter_key_event_new_from_evdev ((ClutterInputDevice *) device,
+                                             stage_cogl->wrapper,
+                                             device->xkb,
+                                             _time, key, state);
+
+  _clutter_event_push (event, FALSE);
+
+  if (!xkb_key_repeats (xkb_state_get_map (device->xkb), key))
+    return;
+
+  if (state)
+    {
+      if (device->repeat_key != XKB_KEYCODE_INVALID)
+        g_source_remove (device->repeat_source);
+      device->repeat_key = key;
+      device->repeat_time = _time + KEY_REPEAT_DELAY;
+      device->repeat_source = g_timeout_add (KEY_REPEAT_DELAY,
+                                             clutter_wayland_repeat_key,
+                                             device);
+      device->is_initial_repeat = TRUE;
+    }
+  else if (device->repeat_key == key)
+    {
+      g_source_remove (device->repeat_source);
+      device->repeat_key = XKB_KEYCODE_INVALID;
     }
 }
 
 static void
-clutter_backend_wayland_handle_keyboard_focus (void *data,
-					       struct wl_input_device *input_device,
-					       uint32_t _time,
-					       struct wl_surface *surface,
-					       struct wl_array *keys)
+clutter_wayland_handle_modifiers (void *data,
+                                  struct wl_keyboard *keyboard,
+                                  uint32_t serial,
+                                  uint32_t mods_depressed,
+                                  uint32_t mods_latched,
+                                  uint32_t mods_locked,
+                                  uint32_t group)
 {
   ClutterInputDeviceWayland *device = data;
-  ClutterStageWayland       *stage_wayland;
+
+  if (!device->xkb)
+    return;
+
+  xkb_state_update_mask (device->xkb,
+                         mods_depressed,
+                         mods_latched,
+                         mods_locked,
+                         0,
+                         0,
+                         group);
+}
+
+static void
+clutter_wayland_handle_pointer_enter (void *data,
+                                      struct wl_pointer *pointer,
+                                      uint32_t serial,
+                                      struct wl_surface *surface,
+                                      wl_fixed_t x, wl_fixed_t y)
+{
+  ClutterInputDeviceWayland *device = data;
+  ClutterStageCogl          *stage_cogl;
   ClutterEvent              *event;
-  uint32_t                  *k, *end;
+  ClutterBackend            *backend;
+  ClutterBackendWayland     *backend_wayland;
 
-  if (device->keyboard_focus)
+  stage_cogl = wl_surface_get_user_data (surface);
+
+  device->pointer_focus = stage_cogl;
+  _clutter_input_device_set_stage (CLUTTER_INPUT_DEVICE (device),
+       stage_cogl->wrapper);
+
+  event = clutter_event_new (CLUTTER_ENTER);
+  event->crossing.stage = stage_cogl->wrapper;
+  event->crossing.time = 0; /* ?! */
+  event->crossing.x = wl_fixed_to_double(x);
+  event->crossing.y = wl_fixed_to_double(y);
+  event->crossing.source = CLUTTER_ACTOR (stage_cogl->wrapper);
+  event->crossing.device = CLUTTER_INPUT_DEVICE (device);
+
+  device->x = event->crossing.x;
+  device->y = event->crossing.y;
+
+  _clutter_event_push (event, FALSE);
+
+  /* Set the cursor to the cursor loaded at backend initialisation */
+  backend = clutter_get_default_backend ();
+  backend_wayland = CLUTTER_BACKEND_WAYLAND (backend);
+
+  wl_pointer_set_cursor (pointer,
+                         serial,
+                         backend_wayland->cursor_surface,
+                         backend_wayland->cursor_x,
+                         backend_wayland->cursor_y);
+  wl_surface_attach (backend_wayland->cursor_surface,
+                     backend_wayland->cursor_buffer,
+                     0,
+                     0);
+  wl_surface_damage (backend_wayland->cursor_surface,
+                     0,
+                     0,
+                     32, /* XXX: FFS */
+                     32);
+
+  wl_surface_commit (backend_wayland->cursor_surface);
+}
+
+static void
+clutter_wayland_handle_pointer_leave (void *data,
+                                      struct wl_pointer *pointer,
+                                      uint32_t serial,
+                                      struct wl_surface *surface)
+{
+  ClutterInputDeviceWayland *device = data;
+  ClutterStageCogl          *stage_cogl;
+  ClutterEvent              *event;
+
+  stage_cogl = wl_surface_get_user_data (surface);
+  g_assert (device->pointer_focus == stage_cogl);
+
+  event = clutter_event_new (CLUTTER_LEAVE);
+  event->crossing.stage = stage_cogl->wrapper;
+  event->crossing.time = 0; /* ?! */
+  event->crossing.x = device->x;
+  event->crossing.y = device->y;
+  event->crossing.source = CLUTTER_ACTOR (stage_cogl->wrapper);
+  event->crossing.device = CLUTTER_INPUT_DEVICE (device);
+
+  _clutter_event_push (event, FALSE);
+
+  device->pointer_focus = NULL;
+  _clutter_input_device_set_stage (CLUTTER_INPUT_DEVICE (device), NULL);
+}
+
+static void
+clutter_wayland_handle_keyboard_enter (void *data,
+                                       struct wl_keyboard *keyboard,
+                                       uint32_t serial,
+                                       struct wl_surface *surface,
+                                       struct wl_array *keys)
+{
+  ClutterInputDeviceWayland *device = data;
+  ClutterStageCogl          *stage_cogl;
+
+  stage_cogl = wl_surface_get_user_data (surface);
+  g_assert (device->keyboard_focus == NULL);
+  device->keyboard_focus = stage_cogl;
+
+  _clutter_stage_update_state (stage_cogl->wrapper,
+                               0,
+                               CLUTTER_STAGE_STATE_ACTIVATED);
+}
+
+static void
+clutter_wayland_handle_keyboard_leave (void *data,
+                                       struct wl_keyboard *keyboard,
+                                       uint32_t serial,
+                                       struct wl_surface *surface)
+{
+  ClutterInputDeviceWayland *device = data;
+  ClutterStageCogl          *stage_cogl;
+
+  stage_cogl = wl_surface_get_user_data (surface);
+  g_assert (device->keyboard_focus == stage_cogl);
+
+  _clutter_stage_update_state (stage_cogl->wrapper,
+                               CLUTTER_STAGE_STATE_ACTIVATED,
+                               0);
+
+  if (device->repeat_key != XKB_KEYCODE_INVALID)
     {
-      stage_wayland = device->keyboard_focus;
-      device->keyboard_focus = NULL;
-
-      event = clutter_event_new (CLUTTER_STAGE_STATE);
-      event->stage_state.time = _time;
-      event->stage_state.stage = stage_wayland->wrapper;
-      event->stage_state.stage = stage_wayland->wrapper;
-      event->stage_state.changed_mask = CLUTTER_STAGE_STATE_ACTIVATED;
-      event->stage_state.new_state = 0;
-
-      _clutter_event_push (event, FALSE);
+      g_source_remove (device->repeat_source);
+      device->repeat_key = XKB_KEYCODE_INVALID;
     }
 
-  if (surface)
+  device->keyboard_focus = NULL;
+}
+
+static const struct wl_keyboard_listener _clutter_keyboard_wayland_listener = {
+  clutter_wayland_handle_keymap,
+  clutter_wayland_handle_keyboard_enter,
+  clutter_wayland_handle_keyboard_leave,
+  clutter_wayland_handle_key,
+  clutter_wayland_handle_modifiers,
+};
+
+static const struct wl_pointer_listener _clutter_pointer_wayland_listener = {
+  clutter_wayland_handle_pointer_enter,
+  clutter_wayland_handle_pointer_leave,
+  clutter_wayland_handle_motion,
+  clutter_wayland_handle_button,
+  clutter_wayland_handle_axis,
+};
+
+static void
+clutter_wayland_handle_seat (void *data,
+                             struct wl_seat *seat,
+                             uint32_t capabilities)
+{
+  ClutterInputDeviceWayland *device = data;
+
+  /* XXX: Needs to handle removals too. */
+
+  if ((capabilities & WL_SEAT_CAPABILITY_POINTER) && !device->has_pointer)
     {
-      stage_wayland = wl_surface_get_user_data (surface);
-      device->keyboard_focus = stage_wayland;
+      struct wl_pointer *pointer;
 
-      event = clutter_event_new (CLUTTER_STAGE_STATE);
-      event->stage_state.stage = stage_wayland->wrapper;
-      event->stage_state.changed_mask = CLUTTER_STAGE_STATE_ACTIVATED;
-      event->stage_state.new_state = CLUTTER_STAGE_STATE_ACTIVATED;
+      pointer = wl_seat_get_pointer (seat);
+      if (pointer)
+        {
+          wl_pointer_add_listener (pointer,
+                                   &_clutter_pointer_wayland_listener,
+                                   device);
+          wl_pointer_set_user_data (pointer, device);
+          device->has_pointer = 1;
+        }
+    }
 
-      end = keys->data + keys->size;
-      device->modifier_state = 0;
-      for (k = keys->data; k < end; k++)
-	device->modifier_state |= device->xkb->map->modmap[*k];
+  if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && !device->has_keyboard)
+    {
+      struct wl_keyboard *keyboard;
 
-      _clutter_event_push (event, FALSE);
+      keyboard = wl_seat_get_keyboard (seat);
+      if (keyboard)
+        {
+          wl_keyboard_add_listener (keyboard,
+                                    &_clutter_keyboard_wayland_listener,
+                                    device);
+          wl_keyboard_set_user_data (keyboard, device);
+          device->has_keyboard = 1;
+        }
     }
 }
 
-static const struct wl_input_device_listener input_device_listener = {
-  clutter_backend_wayland_handle_motion,
-  clutter_backend_wayland_handle_button,
-  clutter_backend_wayland_handle_key,
-  clutter_backend_wayland_handle_pointer_focus,
-  clutter_backend_wayland_handle_keyboard_focus,
+const struct wl_seat_listener _clutter_seat_wayland_listener = {
+  clutter_wayland_handle_seat,
 };
+
+static gboolean
+clutter_input_device_wayland_keycode_to_evdev (ClutterInputDevice *device,
+                                               guint hardware_keycode,
+                                               guint *evdev_keycode)
+{
+  /* The hardware keycodes from the wayland backend are already evdev
+     keycodes */
+  *evdev_keycode = hardware_keycode;
+  return TRUE;
+}
 
 static void
 clutter_input_device_wayland_class_init (ClutterInputDeviceWaylandClass *klass)
 {
+  klass->keycode_to_evdev = clutter_input_device_wayland_keycode_to_evdev;
 }
 
 static void
 clutter_input_device_wayland_init (ClutterInputDeviceWayland *self)
 {
+  self->repeat_key = XKB_KEYCODE_INVALID;
 }
 
-const char *option_xkb_layout = "us";
-const char *option_xkb_variant = "";
-const char *option_xkb_options = "";
-
-void
-_clutter_backend_add_input_device (ClutterBackendWayland *backend_wayland,
-				   uint32_t id)
+/**
+ * clutter_wayland_input_device_get_wl_input_device: (skip)
+ *
+ * @device: a #ClutterInputDevice
+ *
+ * Access the underlying data structure representing the Wayland device that is
+ * backing this #ClutterInputDevice.
+ *
+ * Note: this function can only be called when running on the Wayland platform.
+ * Calling this function at any other time will return %NULL.
+ *
+ * Returns: (transfer none): the Wayland input device associated with the
+ * @device
+ *
+ * Since: 1.10
+ */
+struct wl_seat *
+clutter_wayland_input_device_get_wl_seat (ClutterInputDevice *device)
 {
-  ClutterInputDeviceWayland *device;
+  ClutterInputDeviceWayland *wayland_device;
 
-  device = g_object_new (CLUTTER_TYPE_INPUT_DEVICE_WAYLAND,
-			 "id", id,
-			 "device-type", CLUTTER_POINTER_DEVICE,
-			 "name", "wayland device",
-			 NULL);
+  if (!CLUTTER_INPUT_DEVICE_WAYLAND (device))
+    return NULL;
 
-  device->input_device =
-    wl_input_device_create (backend_wayland->wayland_display, id);
-  wl_input_device_add_listener (device->input_device,
-				&input_device_listener, device);
-  wl_input_device_set_user_data (device->input_device, device);
+  wayland_device = CLUTTER_INPUT_DEVICE_WAYLAND (device);
 
-  device->xkb = _clutter_xkb_desc_new (NULL,
-                                       option_xkb_layout,
-                                       option_xkb_variant,
-                                       option_xkb_options);
-  if (!device->xkb)
-    CLUTTER_NOTE (BACKEND, "Failed to compile keymap");
+  return wayland_device->input_device;
 }

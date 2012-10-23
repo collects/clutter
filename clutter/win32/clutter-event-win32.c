@@ -246,12 +246,12 @@ clutter_event_prepare (GSource *source,
 {
   gboolean retval;
 
-  clutter_threads_enter ();
+  _clutter_threads_acquire_lock ();
 
   *timeout = -1;
   retval = (clutter_events_pending () || check_msg_pending ());
 
-  clutter_threads_leave ();
+  _clutter_threads_release_lock ();
 
   return retval;
 }
@@ -262,14 +262,14 @@ clutter_event_check (GSource *source)
   ClutterEventSource *event_source = (ClutterEventSource *) source;
   gboolean retval;
 
-  clutter_threads_enter ();
+  _clutter_threads_acquire_lock ();
 
   if ((event_source->event_poll_fd.revents & G_IO_IN))
     retval = (clutter_events_pending () || check_msg_pending ());
   else
     retval = FALSE;
 
-  clutter_threads_leave ();
+  _clutter_threads_release_lock ();
 
   return retval;
 }
@@ -282,7 +282,7 @@ clutter_event_dispatch (GSource     *source,
   ClutterEvent *event;
   MSG msg;
 
-  clutter_threads_enter ();
+  _clutter_threads_acquire_lock ();
 
   /* Process Windows messages until we've got one that translates into
      the clutter event queue */
@@ -298,7 +298,7 @@ clutter_event_dispatch (GSource     *source,
       clutter_event_free (event);
     }
 
-  clutter_threads_leave ();
+  _clutter_threads_release_lock ();
 
   return TRUE;
 }
@@ -375,6 +375,9 @@ clutter_win32_handle_event (const MSG *msg)
     return TRUE;
 
   manager = clutter_device_manager_get_default ();
+  if (manager == NULL)
+    return FALSE;
+
   core_pointer =
     clutter_device_manager_get_core_device (manager, CLUTTER_POINTER_DEVICE);
   core_keyboard =
@@ -412,30 +415,18 @@ clutter_win32_handle_event (const MSG *msg)
     case WM_ACTIVATE:
       if (msg->wParam == WA_INACTIVE)
         {
-          if (stage_win32->state & CLUTTER_STAGE_STATE_ACTIVATED)
+          if (_clutter_stage_is_activated (stage_win32->wrapper))
             {
-              ClutterEvent *event = clutter_event_new (CLUTTER_STAGE_STATE);
-
-              stage_win32->state &= ~CLUTTER_STAGE_STATE_ACTIVATED;
-
-              event->any.stage = stage;
-              event->stage_state.changed_mask = CLUTTER_STAGE_STATE_ACTIVATED;
-              event->stage_state.new_state = stage_win32->state;
-
-              take_and_queue_event (event);
+              _clutter_stage_update_state (stage_win32->wrapper,
+                                           CLUTTER_STAGE_STATE_ACTIVATED,
+                                           0);
             }
         }
-      else if (!(stage_win32->state & CLUTTER_STAGE_STATE_ACTIVATED))
+      else if (!_clutter_stage_is_activated (stage_win32->wrapper))
         {
-          ClutterEvent *event = clutter_event_new (CLUTTER_STAGE_STATE);
-
-          stage_win32->state |= CLUTTER_STAGE_STATE_ACTIVATED;
-
-          event->any.stage = stage;
-          event->stage_state.changed_mask = CLUTTER_STAGE_STATE_ACTIVATED;
-          event->stage_state.new_state = stage_win32->state;
-
-          take_and_queue_event (event);
+          _clutter_stage_update_state (stage_win32->wrapper,
+                                       0,
+                                       CLUTTER_STAGE_STATE_ACTIVATED);
         }
       break;
 
@@ -580,7 +571,7 @@ clutter_win32_handle_event (const MSG *msg)
             clutter_event_set_device (event, core_pointer);
 
             /* we entered the stage */
-            _clutter_stage_add_device (stage, core_pointer);
+            _clutter_input_device_set_stage (core_pointer, stage);
 
             take_and_queue_event (crossing);
 
@@ -605,7 +596,7 @@ clutter_win32_handle_event (const MSG *msg)
         clutter_event_set_device (event, core_pointer);
 
         /* we left the stage */
-        _clutter_stage_remove_device (stage, core_pointer);
+        _clutter_input_device_set_stage (core_pointer, NULL);
 
         /* When we get a leave message the mouse tracking is
            automatically cancelled so we'll need to start it again when

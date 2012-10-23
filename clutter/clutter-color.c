@@ -384,17 +384,8 @@ clutter_color_shade (const ClutterColor *color,
   
   clutter_color_to_hls (color, &h, &l, &s);
 
-  l *= factor;
-  if (l > 1.0)
-    l = 1.0;
-  else if (l < 0)
-    l = 0;
-
-  s *= factor;
-  if (s > 1.0)
-    s = 1.0;
-  else if (s < 0)
-    s = 0;
+  l = CLAMP (l * factor, 0.0, 1.0);
+  s = CLAMP (s * factor, 0.0, 1.0);
   
   clutter_color_from_hls (result, h, l, s);
 
@@ -589,6 +580,7 @@ parse_hsla (ClutterColor *color,
   str += 1;
 
   l = CLAMP (number / 100.0, 0.0, 1.0);
+  skip_whitespace (&str);
 
   /* alpha (optional); since the alpha channel value can only
    * be between 0 and 1 we don't use the parse_rgb_value()
@@ -719,17 +711,16 @@ clutter_color_from_string (ClutterColor *color,
    * parsing the color ourselves, as we need the alpha channel that
    * Pango can't retrieve.
    */
-  if (str[0] == '#')
+  if (str[0] == '#' && str[1] != '\0')
     {
+      gsize length = strlen (str + 1);
       gint32 result;
 
-      if (sscanf (str + 1, "%x", &result))
+      if (sscanf (str + 1, "%x", &result) == 1)
         {
-          gsize length = strlen (str);
-
           switch (length)
             {
-            case 9: /* rrggbbaa */
+            case 8: /* rrggbbaa */
               color->red   = (result >> 24) & 0xff;
               color->green = (result >> 16) & 0xff;
               color->blue  = (result >>  8) & 0xff;
@@ -738,7 +729,7 @@ clutter_color_from_string (ClutterColor *color,
 
               return TRUE;
 
-            case 7: /* #rrggbb */
+            case 6: /* #rrggbb */
               color->red   = (result >> 16) & 0xff;
               color->green = (result >>  8) & 0xff;
               color->blue  = result & 0xff;
@@ -747,7 +738,7 @@ clutter_color_from_string (ClutterColor *color,
 
               return TRUE;
 
-            case 5: /* #rgba */
+            case 4: /* #rgba */
               color->red   = ((result >> 12) & 0xf);
               color->green = ((result >>  8) & 0xf);
               color->blue  = ((result >>  4) & 0xf);
@@ -760,7 +751,7 @@ clutter_color_from_string (ClutterColor *color,
 
               return TRUE;
 
-            case 4: /* #rgb */
+            case 3: /* #rgb */
               color->red   = ((result >>  8) & 0xf);
               color->green = ((result >>  4) & 0xf);
               color->blue  = result & 0xf;
@@ -774,13 +765,18 @@ clutter_color_from_string (ClutterColor *color,
               return TRUE;
 
             default:
-              /* pass through to Pango */
-              break;
+              return FALSE;
             }
         }
     }
 
-  /* Fall back to pango for named colors */
+  /* fall back to pango for X11-style named colors; see:
+   *
+   *   http://en.wikipedia.org/wiki/X11_color_names
+   *
+   * for a list. at some point we might even ship with our own list generated
+   * from X11/rgb.txt, like we generate the key symbols.
+   */
   if (pango_color_parse (&pango_color, str))
     {
       color->red   = pango_color.red;
@@ -823,8 +819,8 @@ clutter_color_to_string (const ClutterColor *color)
 
 /**
  * clutter_color_equal:
- * @v1: a #ClutterColor
- * @v2: a #ClutterColor
+ * @v1: (type Clutter.Color): a #ClutterColor
+ * @v2: (type Clutter.Color): a #ClutterColor
  *
  * Compares two #ClutterColor<!-- -->s and checks if they are the same.
  *
@@ -858,7 +854,7 @@ clutter_color_equal (gconstpointer v1,
 
 /**
  * clutter_color_hash:
- * @v: a #ClutterColor
+ * @v: (type Clutter.Color): a #ClutterColor
  *
  * Converts a #ClutterColor to a hash value.
  *
@@ -963,6 +959,12 @@ clutter_color_free (ClutterColor *color)
  *
  * Creates a new #ClutterColor with the given values.
  *
+ * This function is the equivalent of:
+ *
+ * |[
+ *   clutter_color_init (clutter_color_alloc (), red, green, blue, alpha);
+ * ]|
+ *
  * Return value: (transfer full): the newly allocated color.
  *   Use clutter_color_free() when done
  *
@@ -974,13 +976,55 @@ clutter_color_new (guint8 red,
                    guint8 blue,
                    guint8 alpha)
 {
-  ClutterColor *color;
+  return clutter_color_init (clutter_color_alloc (),
+                             red,
+                             green,
+                             blue,
+                             alpha);
+}
 
-  color = g_slice_new (ClutterColor);
+/**
+ * clutter_color_alloc:
+ *
+ * Allocates a new, transparent black #ClutterColor.
+ *
+ * Return value: (transfer full): the newly allocated #ClutterColor; use
+ *   clutter_color_free() to free its resources
+ *
+ * Since: 1.12
+ */
+ClutterColor *
+clutter_color_alloc (void)
+{
+  return g_slice_new0 (ClutterColor);
+}
 
-  color->red   = red;
+/**
+ * clutter_color_init:
+ * @color: a #ClutterColor
+ * @red: red component of the color, between 0 and 255
+ * @green: green component of the color, between 0 and 255
+ * @blue: blue component of the color, between 0 and 255
+ * @alpha: alpha component of the color, between 0 and 255
+ *
+ * Initializes @color with the given values.
+ *
+ * Return value: (transfer none): the initialized #ClutterColor
+ *
+ * Since: 1.12
+ */
+ClutterColor *
+clutter_color_init (ClutterColor *color,
+                    guint8        red,
+                    guint8        green,
+                    guint8        blue,
+                    guint8        alpha)
+{
+  g_return_val_if_fail (color != NULL, NULL);
+
+  color->red = red;
   color->green = green;
-  color->blue  = blue;
+  color->blue = blue;
   color->alpha = alpha;
 
   return color;

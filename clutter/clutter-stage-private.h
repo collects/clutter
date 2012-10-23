@@ -85,13 +85,6 @@ ClutterStageQueueRedrawEntry *_clutter_stage_queue_actor_redraw            (Clut
                                                                             ClutterPaintVolume           *clip);
 void                          _clutter_stage_queue_redraw_entry_invalidate (ClutterStageQueueRedrawEntry *entry);
 
-void            _clutter_stage_add_device       (ClutterStage       *stage,
-                                                 ClutterInputDevice *device);
-void            _clutter_stage_remove_device    (ClutterStage       *stage,
-                                                 ClutterInputDevice *device);
-gboolean        _clutter_stage_has_device       (ClutterStage       *stage,
-                                                 ClutterInputDevice *device);
-
 CoglFramebuffer *_clutter_stage_get_active_framebuffer (ClutterStage *stage);
 
 gint32          _clutter_stage_acquire_pick_id          (ClutterStage *stage,
@@ -101,13 +94,28 @@ void            _clutter_stage_release_pick_id          (ClutterStage *stage,
 ClutterActor *  _clutter_stage_get_actor_by_pick_id     (ClutterStage *stage,
                                                          gint32        pick_id);
 
-void            _clutter_stage_add_drag_actor           (ClutterStage       *stage,
-                                                         ClutterInputDevice *device,
-                                                         ClutterActor       *actor);
-ClutterActor *  _clutter_stage_get_drag_actor           (ClutterStage       *stage,
-                                                         ClutterInputDevice *device);
-void            _clutter_stage_remove_drag_actor        (ClutterStage       *stage,
-                                                         ClutterInputDevice *device);
+void            _clutter_stage_add_pointer_drag_actor    (ClutterStage       *stage,
+                                                          ClutterInputDevice *device,
+                                                          ClutterActor       *actor);
+ClutterActor *  _clutter_stage_get_pointer_drag_actor    (ClutterStage       *stage,
+                                                          ClutterInputDevice *device);
+void            _clutter_stage_remove_pointer_drag_actor (ClutterStage       *stage,
+                                                          ClutterInputDevice *device);
+
+void            _clutter_stage_add_touch_drag_actor    (ClutterStage         *stage,
+                                                        ClutterEventSequence *sequence,
+                                                        ClutterActor         *actor);
+ClutterActor *  _clutter_stage_get_touch_drag_actor    (ClutterStage         *stage,
+                                                        ClutterEventSequence *sequence);
+void            _clutter_stage_remove_touch_drag_actor (ClutterStage         *stage,
+                                                        ClutterEventSequence *sequence);
+
+ClutterStageState       _clutter_stage_get_state        (ClutterStage      *stage);
+gboolean                _clutter_stage_is_activated     (ClutterStage      *stage);
+gboolean                _clutter_stage_is_fullscreen    (ClutterStage      *stage);
+gboolean                _clutter_stage_update_state     (ClutterStage      *stage,
+                                                         ClutterStageState  unset_state,
+                                                         ClutterStageState  set_state);
 
 G_END_DECLS
 

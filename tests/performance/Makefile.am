@@ -10,18 +10,20 @@ noinst_PROGRAMS = \
 	test-state-pick
 
 INCLUDES = \
-	-I$(top_srcdir)/ \
+	-I$(top_srcdir) \
+	-I$(top_builddir) \
 	-I$(top_srcdir)/clutter \
 	-I$(top_builddir)/clutter
 
-common_ldadd = $(top_builddir)/clutter/libclutter-@CLUTTER_SONAME_INFIX@-@CLUTTER_API_VERSION@.la
+common_ldadd = $(top_builddir)/clutter/libclutter-@CLUTTER_API_VERSION@.la
 
 LDADD = $(common_ldadd) $(CLUTTER_LIBS) -lm
 
 AM_CFLAGS = \
 	$(CLUTTER_CFLAGS) \
-	$(MAINTAINER_CFLAGS) \
 	-DG_DISABLE_SINGLE_INCLUDES \
+	-DGLIB_DISABLE_DEPRECATION_WARNINGS \
+	-DCLUTTER_DISABLE_DEPRECATION_WARNINGS \
 	-DTESTS_DATA_DIR=\""$(top_srcdir)/tests/data/"\"
 
 perf-report: check

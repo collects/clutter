@@ -22,7 +22,10 @@
  *  Damien Lespiau <damien.lespiau@intel.com>
  */
 
-#include <X11/extensions/XKBcommon.h>
+#ifndef __CLUTTER_XKB_UTILS_H__
+#define __CLUTTER_XKB_UTILS_H__
+
+#include <xkbcommon/xkbcommon.h>
 
 #include "clutter-stage.h"
 #include "clutter-event.h"
@@ -30,12 +33,13 @@
 
 ClutterEvent *    _clutter_key_event_new_from_evdev (ClutterInputDevice *device,
                                                      ClutterStage       *stage,
-                                                     struct xkb_desc    *xkb,
+                                                     struct xkb_state   *xkb_state,
                                                      uint32_t            _time,
                                                      uint32_t            key,
-                                                     uint32_t            state,
-                                                     uint32_t           *modifier_state);
-struct xkb_desc * _clutter_xkb_desc_new             (const gchar *model,
+                                                     uint32_t            state);
+struct xkb_state * _clutter_xkb_state_new           (const gchar *model,
                                                      const gchar *layout,
                                                      const gchar *variant,
                                                      const gchar *options);
+
+#endif /* __CLUTTER_XKB_UTILS_H__ */

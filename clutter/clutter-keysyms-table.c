@@ -1,5 +1,7 @@
 #include <glib.h>
 
+#include "clutter-event.h"
+
 /* Code below from GDK, which contains following comment:
  *
  * Thanks to Markus G. Kuhn <mkuhn@acm.org> for the ksysym<->Unicode
@@ -1643,7 +1645,7 @@ static const int clutter_unicode_to_keysym_tab_size =
  * Since: 1.10
  */
 guint
-clutter_unicode_to_keyval (guint32 wc)
+clutter_unicode_to_keysym (guint32 wc)
 {
   int min = 0;
   int max = clutter_unicode_to_keysym_tab_size - 1;

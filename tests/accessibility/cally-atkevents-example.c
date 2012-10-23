@@ -88,17 +88,16 @@ make_ui (ClutterActor *stage)
   ClutterActor    *editable      = NULL;
   ClutterActor    *rectangle     = NULL;
   ClutterActor    *label         = NULL;
-  ClutterColor     color_stage   = { 0x00, 0x00, 0x00, 0xff };
-  ClutterColor     color_text    = { 0xff, 0x00, 0x00, 0xff };
   ClutterColor     color_sel     = { 0x00, 0xff, 0x00, 0x55 };
   ClutterColor     color_label   = { 0x00, 0xff, 0x55, 0xff };
   ClutterColor     color_rect    = { 0x00, 0xff, 0xff, 0x55 };
-  ClutterGeometry  label_geom    = {0, 50, -1, -1};
-  ClutterGeometry  editable_geom = {150, 50, 500, 75};
+  float label_geom_y, editable_geom_y;
 
-
-  clutter_stage_set_color (CLUTTER_STAGE (stage), &color_stage);
+  clutter_stage_set_color (CLUTTER_STAGE (stage), CLUTTER_COLOR_White);
   clutter_actor_set_size (stage, WIDTH, HEIGHT);
+
+  label_geom_y = 50;
+  editable_geom_y = 50;
 
   for (i = 0; i < NUM_ENTRIES; i++)
     {
@@ -106,13 +105,14 @@ make_ui (ClutterActor *stage)
       label = clutter_text_new_full ("Sans Bold 32px",
                                      "Entry",
                                      &color_label);
-      clutter_actor_set_geometry (label, &label_geom);
+      clutter_actor_set_position (label, 0, label_geom_y);
 
       /* editable */
       editable = clutter_text_new_full ("Sans Bold 32px",
                                         "ddd",
-                                        &color_text);
-      clutter_actor_set_geometry (editable, &editable_geom);
+                                        CLUTTER_COLOR_Red);
+      clutter_actor_set_position (editable, 150, editable_geom_y);
+      clutter_actor_set_size (editable, 500, 75);
       clutter_text_set_editable (CLUTTER_TEXT (editable), TRUE);
       clutter_text_set_selectable (CLUTTER_TEXT (editable), TRUE);
       clutter_text_set_selection_color (CLUTTER_TEXT (editable),
@@ -122,23 +122,24 @@ make_ui (ClutterActor *stage)
 
       /* rectangle: to create a entry "feeling" */
       rectangle = clutter_rectangle_new_with_color (&color_rect);
-      clutter_actor_set_geometry (rectangle, &editable_geom);
+      clutter_actor_set_position (rectangle, 150, editable_geom_y);
+      clutter_actor_set_size (rectangle, 500, 75);
 
       clutter_container_add_actor (CLUTTER_CONTAINER (stage), label);
       clutter_container_add_actor (CLUTTER_CONTAINER (stage), editable);
       clutter_container_add_actor (CLUTTER_CONTAINER (stage), rectangle);
 
-      label_geom.y += HEIGHT_STEP;
-      editable_geom.y += HEIGHT_STEP;
+      label_geom_y += HEIGHT_STEP;
+      editable_geom_y += HEIGHT_STEP;
     }
 }
 
 int
 main (int argc, char *argv[])
 {
-  ClutterActor *stage         = NULL;
-  Data data1, data2,data3;
-  guint id_2 = 0;
+  ClutterActor *stage, *stage_main;
+  Data data1, data2, data3;
+  guint id_1 = 0, id_2 = 0, id_3 = 0;
 
   g_set_application_name ("AtkText");
 
@@ -157,11 +158,14 @@ main (int argc, char *argv[])
   data3.value = 30;
 
   /* key event listeners */
-  atk_add_key_event_listener ((AtkKeySnoopFunc)atk_key_listener, &data1);
+  id_1 = atk_add_key_event_listener ((AtkKeySnoopFunc)atk_key_listener, &data1);
+  atk_remove_key_event_listener (id_1);
   id_2 = atk_add_key_event_listener ((AtkKeySnoopFunc)atk_key_listener, &data2);
-  atk_add_key_event_listener ((AtkKeySnoopFunc)atk_key_listener, &data3);
+  id_3 = atk_add_key_event_listener ((AtkKeySnoopFunc)atk_key_listener, &data3);
 
   atk_remove_key_event_listener (id_2);
+
+  g_print ("key event listener ids registered: (%i, %i, %i)\n", id_1, id_2, id_3);
 
   /* event listeners */
   atk_add_global_event_listener (window_event_listener, "Atk:AtkWindow:create");
@@ -169,14 +173,19 @@ main (int argc, char *argv[])
   atk_add_global_event_listener (window_event_listener, "Atk:AtkWindow:activate");
   atk_add_global_event_listener (window_event_listener, "Atk:AtkWindow:deactivate");
 
-  stage = clutter_stage_get_default ();
-  make_ui (stage);
+  stage_main = clutter_stage_new ();
+  clutter_stage_set_title (CLUTTER_STAGE (stage_main), "Cally - AtkEvents/1");
+  g_signal_connect (stage_main, "destroy", G_CALLBACK (clutter_main_quit), NULL);
+  make_ui (stage_main);
 
-  clutter_actor_show_all (stage);
+  clutter_actor_show_all (stage_main);
 
   if (clutter_feature_available (CLUTTER_FEATURE_STAGE_MULTIPLE))
     {
       stage = clutter_stage_new ();
+      clutter_stage_set_title (CLUTTER_STAGE (stage), "Cally - AtkEvents/2");
+      g_signal_connect (stage, "destroy", G_CALLBACK (clutter_main_quit), NULL);
+
       make_ui (stage);
       clutter_actor_show_all (stage);
     }

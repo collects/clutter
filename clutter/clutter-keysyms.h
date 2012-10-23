@@ -290,6 +290,7 @@
 #define CLUTTER_KEY_dead_U 0xfe89
 #define CLUTTER_KEY_dead_small_schwa 0xfe8a
 #define CLUTTER_KEY_dead_capital_schwa 0xfe8b
+#define CLUTTER_KEY_dead_greek 0xfe8c
 #define CLUTTER_KEY_First_Virtual_Screen 0xfed0
 #define CLUTTER_KEY_Prev_Virtual_Screen 0xfed1
 #define CLUTTER_KEY_Next_Virtual_Screen 0xfed2
@@ -336,6 +337,12 @@
 #define CLUTTER_KEY_Pointer_Accelerate 0xfefa
 #define CLUTTER_KEY_Pointer_DfltBtnNext 0xfefb
 #define CLUTTER_KEY_Pointer_DfltBtnPrev 0xfefc
+#define CLUTTER_KEY_ch 0xfea0
+#define CLUTTER_KEY_Ch 0xfea1
+#define CLUTTER_KEY_CH 0xfea2
+#define CLUTTER_KEY_c_h 0xfea3
+#define CLUTTER_KEY_C_h 0xfea4
+#define CLUTTER_KEY_C_H 0xfea5
 #define CLUTTER_KEY_3270_Duplicate 0xfd01
 #define CLUTTER_KEY_3270_FieldMark 0xfd02
 #define CLUTTER_KEY_3270_Right2 0xfd03
@@ -1198,6 +1205,7 @@
 #define CLUTTER_KEY_leftdoublequotemark 0xad2
 #define CLUTTER_KEY_rightdoublequotemark 0xad3
 #define CLUTTER_KEY_prescription 0xad4
+#define CLUTTER_KEY_permille 0xad5
 #define CLUTTER_KEY_minutes 0xad6
 #define CLUTTER_KEY_seconds 0xad7
 #define CLUTTER_KEY_latincross 0xad9
@@ -1631,6 +1639,8 @@
 #define CLUTTER_KEY_obarred 0x1000275
 #define CLUTTER_KEY_SCHWA 0x100018f
 #define CLUTTER_KEY_schwa 0x1000259
+#define CLUTTER_KEY_EZH 0x10001b7
+#define CLUTTER_KEY_ezh 0x1000292
 #define CLUTTER_KEY_Lbelowdot 0x1001e36
 #define CLUTTER_KEY_lbelowdot 0x1001e37
 #define CLUTTER_KEY_Abelowdot 0x1001ea0
@@ -2288,10 +2298,7 @@
 #define CLUTTER_KEY_ClearGrab 0x1008fe21
 #define CLUTTER_KEY_Next_VMode 0x1008fe22
 #define CLUTTER_KEY_Prev_VMode 0x1008fe23
-
-/* include the compatibility header */
-#ifndef CLUTTER_DISABLE_DEPRECATED
-#include "clutter-keysyms-compat.h"
-#endif
+#define CLUTTER_KEY_LogWindowTree 0x1008fe24
+#define CLUTTER_KEY_LogGrabInfo 0x1008fe25
 
 #endif /* __CLUTTER_KEYSYMS_H__ */

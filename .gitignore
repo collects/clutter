@@ -22,13 +22,17 @@ stamp-marshal
 /clutter/clutter-version.h
 /clutter/gcov-report.txt
 /clutter/clutter-json.h
-/clutter/cogl/clutter-cex100.h
+/clutter/cex100/clutter-cex100.h
+/clutter-lcov.info
+/clutter-lcov
 /build/autotools/*.m4
 !/build/autotools/introspection.m4
 !/build/autotools/as-linguas.m4
 !/build/autotools/as-compiler-flag.m4
 *.gir
 *.typelib
+*.gcda
+*.gcno
 config.*
 configure
 depcomp
@@ -75,6 +79,7 @@ TAGS
 /tests/conform/test-launcher.sh
 /tests/interactive/wrapper.sh
 /po/POTFILES
+/po/clutter-1.0.pot
 /po/*.gmo
 /po/Makefile.in.in
 /po/Makevars.template

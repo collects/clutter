@@ -53,18 +53,19 @@ noinst_PROGRAMS = \
 
 INCLUDES = \
 	-I$(top_srcdir)/ \
+	-I$(top_builddir)/ \
 	-I$(top_srcdir)/clutter \
 	-I$(top_builddir)/clutter \
 	$(NULL)
 
-LDADD = $(top_builddir)/clutter/libclutter-@CLUTTER_SONAME_INFIX@-@CLUTTER_API_VERSION@.la
+LDADD = $(top_builddir)/clutter/libclutter-@CLUTTER_API_VERSION@.la -lm
 
-AM_CFLAGS = $(CLUTTER_CFLAGS) $(MAINTAINER_CFLAGS)
+AM_CFLAGS = $(CLUTTER_CFLAGS)
 
 AM_CPPFLAGS = \
 	-DG_DISABLE_SINGLE_INCLUDES \
 	-DCOGL_DISABLE_DEPRECATED \
-	-DCLUTTER_DISABLE_DEPRECATED \
+	-DCLUTTER_DISABLE_DEPRECATION_WARNINGS \
 	-DTESTS_DATA_DIR=\""$(top_srcdir)/tests/data/"\"
 
 AM_LDFLAGS = $(CLUTTER_LIBS) -export-dynamic

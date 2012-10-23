@@ -1,3 +1,1039 @@
+Clutter 1.12.0                                                       2012-09-24
+===============================================================================
+
+  • List of changes since Clutter 1.11.16
+
+    - Fix the device tracking for core X11 pointers
+    If a master input device can emit both touch and pointer events we end up
+    in an inconsistent state; we should account for this case when tracking
+    the stage that contains the events of each input device.
+
+    - Respect text direction in BinLayout
+    The text direction of the children of an actor using the BinLayout layout
+    manager should be taken into account, both when using the Actor's align
+    flags and when using the legacy BinAlignment flags.
+
+    - Translations updates
+    Hindi, Telugu, Catalan, Malayalam, Japanese, Bulgarian, Kannada.
+
+  • List of bugs fixed since Clutter 1.11.16
+
+    #684214 - messageTray: Fix summary position in RTL locales
+    #684552 - Track coordinates and device ids in test-events
+    #684530 - Print device number in debug messages from input-device
+    #684509 - Mouse events lost after touch event from virtual core pointer
+
+Many thanks to:
+
+  Emanuele Aina, Emmanuele Bassi, Alexander Shopov, Ani Peter,
+  Carles Ferrando, Chandan Kumar, Gil Forcada, Krishnababu Krothapalli,
+  Nishio Futoshi, Shankar Prasad.
+
+Clutter 1.11.16                                                      2012-09-17
+===============================================================================
+
+  • List of changes since Clutter 1.11.14
+
+    - Fixes for gesture-based actions
+    Ensure that the ClutterPanAction::pan-stopped signal is emitted before
+    the ClutterGestureAction::gesture-begin signal, in case a new gesture
+    starts; this requires adding a new state to ClutterGestureAction, the
+    gesture-prepare state.
+
+    - Ensure modified Enter keys do not end up in the Text buffer
+    For single-line ClutterText actors.
+
+    - Add touch event support to ClutterClickAction
+
+    - Updated translations
+    British English, Indonesian, Traditional Chinese (Hong Kong and Taiwan),
+    French, Serbian, Russian, German, Slovenian, Brazilian Portuguese, Greek,
+    Portuguese, Belarusian, Assamese, Danish.
+
+  • List of bugs fixed since Clutter 1.11.14
+
+    #683301 - stage: Normalize key focus setting
+    #683430 - CLUTTER_GESTURE_ACTION_GET_CLASS() calls
+              G_TYPE_INSTANCE_GET_PRIVATE() instead of
+              G_TYPE_INSTANCE_GET_CLASS()
+    #683431 - PanAction::pan-stopped sometimes is emitted before
+              ::gesture-begin
+    #683471 - All gestures get cancelled after missing a button release event
+    #682161 - ClutterImage overflows beyond its actor's allocation
+    #623344 - Search incorrectly handles input
+    #683869 - test-events does not track touch events
+    #683870 - test-events only reports up/down scrolls
+    #683936 - ClickAction doesn't support touch events
+    #683937 - Wrong format identifiers in debug messages in
+              clutter_stage_allocate()
+
+Many thanks to:
+
+  Emanuele Aina, Emmanuele Bassi, Alexandre Franke, Ask H. Larsen, Bruce Cowan,
+  Chao-Hsiung Liao, Christian Kirbach, Debarshi Ray, Dirgita, Duarte Loreto,
+  Enrico Nicoletto, Ihar Hrachyshka, Jasper St. Pierre, Martin Srebotnjak,
+  Matej Urbančič, Nilamdyuti Goswami, Rui Matos, Tom Tryfonidis, Yuri Myasoedov,
+  Мирослав Николић.
+
+Clutter 1.11.14                                                      2012-09-03
+===============================================================================
+
+  • List of changes since Clutter 1.11.12
+
+    - Fixes for the touch sequence handling
+    The stage associated with an input device is now set when a touch sequence
+    begins, and cleared when the last touch sequence ends.
+
+    - Add interpolation for matrices
+    Using the CSS3 Transforms specification for decomposing matrices and
+    interpolating the resulting transformations. This allows animating
+    properties like ClutterActor:transform and ClutterActor:child-transform.
+
+    - Add ClutterPanAction
+    The PanAction is a gesture recogniser that allows panning children of
+    a "scrollable" viewport.
+
+    - Add more accessors to GestureAction for its subclasses
+    GestureAction now allows retrieving the velocity and delta of pointer,
+    as well as the event sequences and devices involved in the gesture. This
+    allows writing more complex gesture recognisers. It is also possible, now,
+    to ask a GestureAction to cancel the current gesture programmatically,
+    e.g. from a timer.
+
+    - Fix ClutterTableLayout.pack() with negative row/column
+    Using a negative number to appen an actor into a TableLayout was causing
+    additional rows and columns to be appended, due to an off by one error.
+
+    - Fix press coordinates when using ClutterDragAction with a drag handle
+    The transformation of the coordinates is now done using the drag actor,
+    as it was supposed to be.
+
+    - Documentation and annotation fixes
+
+    - Deprecate the ClutterActor::pick signal
+    Similarly to the ClutterActor::paint signal, it's now discouraged to
+    connect to the ClutterActor::pick signal; connecting to the pick signal
+    will raise a warning when using the CLUTTER_ENABLE_DIAGNOSTIC environment
+    variable.
+
+    - Updated translations
+    Lithuanian, Indonesian, Traditional Chinese (Hong Kong and Taiwan),
+    Polish, Spanish, Assamese, Greek, Spanish, Polish, Galician,
+    Belarusian.
+
+  • List of bugs fixed since Clutter 1.11.12
+
+    #682795 - Annotation problem for clutter_actor_iter_next() and
+              clutter_actor_iter_prev()
+    #682754 - ClutterRotateAction wrong marshaller usage
+    #681746 - Drag handle misplacemente in examples/drag-action
+    #679990 - clutter_table_layout_pack increments column/row count by two
+    #681648 - add Pan action
+    #683219 - Build failure with old (?) XI2
+    #683066 - brightness-contrast-effect: Don't actually run if it will have
+              no effect
+    #683090 - gesture-action: Add API for cancelling a gesture
+    #683126 - Remove tracking of input devices and sequences from the stage
+    #682362 - Multi touch events skipped
+    #683113 - Bug in ClutterGestureAction documentation
+    #680255 - The middle and right mouse buttons are swapped when using the
+              evdev backend
+
+Many thanks to:
+
+  Emanuele Aina Piotr Drąg, Lionel Landwerlin, Aurimas Černius,
+  Daniel Mustieles, Jasper St. Pierre, Neil Roberts, Nilamdyuti Goswami,
+  Tomeu Vizoso, Andika Triwidada, Andre Kuehne, Chao-Hsiung Liao, Chun-wei Fan,
+  Fran Diéguez, Ihar Hrachyshka, Tom Tryfonidis.
+
+
+Clutter 1.11.12                                                      2012-08-20
+===============================================================================
+
+  • List of changes since Clutter 1.11.10
+
+    - ClutterBinLayout honours the fixed-position of actors
+    The ClutterBinLayout now checks if the :fixed-position-set property of a
+    ClutterActor is set, and will use the fixed position when computing the
+    allocation, without requiring an explicit CLUTTER_BIN_ALIGNMENT_FIXED
+    alignment policy.
+
+    - Soft-deprecation of ClutterGeometry
+    The ClutterGeometry boxed type is a bad rectangle type, with known issues
+    when used for unioning and intersecting; Clutter uses the type in signals
+    and properties, so we cannot fully deprecate it. The documentation has
+    been amended, and API using ClutterGeometry has been deprecated where it
+    makes sense.
+
+    - Deprecate the ClutterActor::paint signal
+    The class handler for ClutterActor::paint is still available, but
+    connecting to the ::paint signal directly is strongly discouraged, and
+    will emit warnings if the CLUTTER_ENABLE_DIAGNOSTIC environment variable
+    is set. Notifications of a full paint for the Stage should happen only
+    through the repaint functions.
+
+    - Ensure we associate input devices to the stage on touch events
+    Like we do for crossing events for pointer devices, beginning and ending
+    a touch sequence should associate the input device to the stage.
+
+    - Allow constraining a DragAction to an area
+    Similarly to how we allow constraining the dragging to an axis, we can
+    also constrain the dragging to a specific area, expressed in
+    parent-relative coordinates.
+
+    - Do not handle events on ClutterText if :selectable is FALSE
+    If the ClutterText:selectable property is FALSE we should only reposition
+    the cursor, and avoid the whole drag-to-select event handling.
+
+    - Add ClutterActor:child-transform
+    The :child-transform property allows applying an initial transformation
+    to the children of an actor, but not to the actor itself.
+
+    - Fix height-for-width policy in ClutterBinLayout
+
+    - Add ClutterZoomAction
+    An action that implements the pinch gesture to scale an actor up or
+    down through two touch points.
+
+    - Documentation fixes
+
+    - Translations update
+    Assamese, Indonesian, Ukranian, Traditional Chinese translation (Hong
+    Kong and Taiwan), Spanish, Galician, Serbian.
+
+  • List of bugs fixed since Clutter 1.11.10
+
+    [bugzilla.gnome.org]
+    #681584 - clutter touch events tests slows down a lot after some use
+    #681074 - Call clutter_input_device_update_from_event from
+              clutter_x11_handle_event
+    #681168 - ClutterDragAction: allow constraining the movement of the
+              dragged actor
+    #682070 - clutter-text: Make sure to paint the background of a text actor
+    #682265 - ClutterBinLayout not honoring ClutterActor position set through
+              clutter_actor_set_position
+    #679483 - ClutterBoxLayout does not do height-for-width properly
+    #678427 - Zoom action
+    #681814 - ClutterDragAction causes crashes when drag actor is destroyed
+              at drag-end time
+
+Many thanks to:
+
+  Nilamdyuti Goswami, Daniel Mustieles, Fran Diéguez, Chao-Hsiung Liao,
+  Daniel Korostil, Dirgita, Duarte Loreto, Giovanni Campagna,
+  Jasper St. Pierre, Lionel Landwerlin, Sjoerd Simons, Tristan Van Berkom,
+  Мирослав Николић.
+
+Clutter 1.11.10                                                      2012-08-07
+===============================================================================
+
+  • List of changes since Clutter 1.11.8
+
+    - Add support for multiple touch points in GestureAction
+    GestureAction subclasses can now define the number of touch points they
+    require in order to start recognising a gesture.
+
+    - Add a RotateAction
+    A GestureAction subclass that requires two touch points to rotate the
+    actor to which it has been applied.
+
+    - Generate crossing events for touch devices
+
+    - Respect ClutterStage.set_motion_events_enabled() for touch events
+
+    - Fix a regression in discrete scroll events emission
+    When using XInput 2, the scroll events generated through buttons (e.g.
+    mouse wheel) should only be emitted on ButtonPress, to match the semantics
+    of the X11 core device handling.
+
+    - Add progress functions defined in CSS3-Transitions
+    The CSS3 Transitions specification defines various timing functions:
+
+      steps                     cubic-bezier
+      step-start                ease
+      step-end                  ease-in
+                                ease-out
+                                ease-in-out
+
+    These are now available to be used with ClutterTimeline.
+
+    - Add ClutterActor::transition-stopped
+    The ::transition-stopped signal is emitted each time a Transition
+    associated to an actor is stopped (using the same sematincs as the
+    ClutterTimeline::stopped signal); it is also a detailed signal, so that
+    it's possible to connect a handler for a specific Transition name.
+
+    - Add ClutterActor.transform
+    The :transform property allows overriding all the decomposed
+    transformations of an actor, like scale and rotate; the transformation
+    is applied relative to the actor's allocated origin and pivot point.
+
+    - Documentation and build fixes
+
+    - Translations update
+     Traditional Chinese (Hong Kong and Taiwan), Spanish, Galician,
+     Serbian, Greek.
+
+  • List of bugs fixed since Clutter 1.11.8
+
+    [bugzilla.gnome.org]
+    #678586 - Modifiy ClutterGestureAction to support multi touch and multiple
+              points
+    #680088 - Duplicate mouse wheel scroll events with xinput enabled
+    #678587 - Add ClutterRotationAction
+    #679797 - Missing enter/leave events generation for touch events
+    #680174 - Add clutter_event_is_pointer_emulated() to distinguish emulated
+              scroll events
+    #680751 - clutter_stage_set_motion_events_enabled() is not honoured with
+              CLUTTER_TOUCH_UPDATE events
+    #680752 - Touch cancel events are not processed by Clutter
+
+Many thanks to:
+
+  Lionel Landwerlin, Chao-Hsiung Liao, Tom Tryfonidis, Мирослав Николић,
+  Daniel Mustieles, Emanuele Aina, Fran Diéguez, Piotr Drąg.
+
+Clutter 1.11.8                                                       2012-07-16
+===============================================================================
+
+  • List of changes since Clutter 1.11.6
+
+    - Bump the dependency of ATK
+    Use the newly released 2.5.3 to rely on the generci event listeners
+    that have been added to ATK; this avoids reimplementing our own.
+
+    - Ensure validity of iterators
+    Even when they are copied.
+
+    - Rounding error fixes for allocations
+    Constraints and other code adjusting the allocation of an actor should
+    round the origin and size of the ClutterActorBox in a consistent way.
+
+    - Updates for the VisualStudio build files
+
+    - Add ClutterDragAction::drag-progress
+    The ::drag-progress signal allows controlling the emission of the
+    ::drag-motion signal. Overriding the default behaviour of a DragAction
+    is now possible without calling g_signal_stop_emission_by_name().
+
+    - Add ClutterActor:pivot-point
+    The pivot point of ClutterActor provides a center, in normalized
+    coordinate space, for the transformations of an actor (scaling, rotation,
+    translation).
+
+    - Deprecations
+    ClutterText:position has been deprecated by ClutterText:cursor-position,
+    for consistency with other ClutterText properties, as well as to avoid
+    shadowing the ClutterActor:position property. ClutterActor:depth has
+    been deprecated by ClutterActor:z-position. ClutterTexture has been
+    deprecated in favour of ClutterImage. ClutterActor:anchor-[xy] and the
+    transformation centers for rotation and scaling have been deprecated
+    in favour of the ClutterActor:pivot-point. The clutter_threads_enter()
+    and clutter_threads_leave() functions have been deprecated.
+
+    - Removal of the experimental ClutterLayoutManager easing state API
+    The easing state API for ClutterLayoutManager was added in 1.11.2, but
+    with the introduction of a default easing state for ClutterActor it is
+    now redundant and not necessary; to animate the allocation of an actor
+    during layout it's simply necessary to set its easing state. All layout
+    managers provided by Clutter have been updated.
+
+  • List of bugs fixed since Clutter 1.11.6
+
+    [bugzilla.gnome.org]
+    #679451 - Add ::drag-progress signal
+    #679457 - Add :cursor-position and deprecate :position
+    #679465 - Add :z-position and deprecate :depth
+    #677853 - Use a single transformation center for rotation and scaling
+
+Many thanks to:
+
+  Chun-wei Fan, Alejandro Piñeiro, Alexander Shopov, Andika Triwidada,
+  Chao-Hsiung Liao, Daniel Mustieles, Fran Diéguez, Ihar Hrachyshka,
+  Kjartan Maraas, Piotr Drąg, Sasi Bhushan Boddepalli.
+
+Clutter 1.11.6                                                       2012-06-23
+===============================================================================
+
+  • List of changes since Clutter 1.11.4
+
+    - Accessibility fixes
+    Clean up key listeners; implement AtkText missing methods for getting text
+    before and after a given offset.
+
+    - Ensure that ClutterBinLayout honours the fixed positioning
+
+    - Improvements in GridLayout
+
+    - Improve debugging messages
+    We now print out the name, type, and pointer address of each actor when
+    emitting debugging messages; also, all messages within one second are
+    grouped together and show the delta instead of a full timestamp, to
+    improve readability.
+
+    - Add ClutterActor:content-repeat
+    The content-repeat property can be used by a ClutterContent implementation
+    to control the repeating of the content's data or pattern. ClutterImage
+    and ClutterCanvas honour this property.
+
+    - Explicit animation API improvements
+    ClutterTransition will now ask the ClutterAnimatable associated to it
+    for its initial or final state, in case either is missing; also, the
+    interpolated value will be coerced to the correct property type instead
+    of generating a warning.
+
+    - Switch to lcov for test coverage
+
+    - Remove an extra reference on ClutterStage
+    The reference added during dispose introduced a leak in case a stage was
+    destroyed.
+
+    - Improve touch event support
+    New API to install a grab on a specific event sequence of an input device;
+    ClutterText now responds to touch events; ClutterDragAction and
+    ClutterDropAction also use touch events as well as pointer events. The
+    conformance and interactive test suites now have units for checking touch
+    event handling.
+
+  • List of bugs fixed since Clutter 1.11.4
+
+    #677659 - add user_data parameter to ClutterBindingActionFunc
+    #677778 - Assorted introspection fixes from Vala
+    #677921 - tests: link test-conformance against libm
+    #675183 - Duplicate accessible key events
+    #678391 - tests: no return in non-void function
+    #678423 - 1.10.8 needs fix on osx ... clutter_x11_enable_xinput not
+              available
+    #678439 - crash in event translation
+    #678264 - actor: Make margin properties animatable
+    #677221 - Orca does not present run dialog text
+    #678047 - Add touch events vfunc on ClutterActor
+    #678049 - Add touch events support to Drag & Drop actions
+    #678279 - Add grab API on touch sequences
+    #678278 - Add touch events support to ClutterText
+
+Many thanks to:
+
+  Alejandro Piñeiro, Alexander Larsson, Lionel Landwerlin, Bastian Winkler,
+  Tomeu Vizoso, Evan Nemerson, Andy Wingo, Daniel Mustieles, Danielle Madeley,
+  Dimitris Spingos, Fran Diéguez, Frédéric Péters, Ihar Hrachyshka,
+  Jasper St. Pierre, Matthias Clasen, Sasi Bhushan Boddepalli, Tom Tryfonidis
+
+Clutter 1.11.4                                                       2012-06-05
+===============================================================================
+
+  • List of changes since Clutter 1.11.2
+
+    - Multi-touch support fixes
+    The clutter_event_copy() code was copying the wrong axis data; the correct
+    touch device was not used when translating axis data from XInput2 to the
+    ClutterInputDevice; touch events were not delivered to the correct actors.
+
+    - Add ClutterDropAction::drop-cancel signal
+    The ::drop-cancel does what it says on the tin: it allows handling a
+    cancelled drop action, instead of relying on the drag end signal on
+    the ClutterDragAction.
+
+    - Add examples in the repository
+    Clutter has been using some interactive tests as examples of idiomatic
+    usage, both as standalone code and for inclusion inside the API reference
+    documentation; this is sub-optimal, as the interactive tests are meant to
+    exercise the API and its behaviour, not as an example of how to write
+    proper Clutter code. For this reason, we now have an examples/ directory
+    that contains example code that can be used to learn Clutter.
+
+    - Allow disabling the tests and examples when building Clutter
+    This should help cross-compilation and testing.
+
+    - Fix the preferred size to always include the actor's margin
+
+    - Fix picking of the ClutterScrollActor
+
+    - Add implicit animations for the color properties of ClutterText
+    Changing any color-related properties of a ClutterText actor will result
+    in a transition, if the easing state has a non-zero duration.
+
+    - Layout managers should respect the child expand and align properties
+    ClutterBinLayout, ClutterBoxLayout, and ClutterTableLayout should use the
+    ClutterActor [xy]-expand and [xy]-align properties, and deprecate their
+    own.
+
+    - Make all layout managers respect the child easing state when allocating
+    ClutterLayoutManager also has properties that can be set to control all
+    the children's default easing state.
+
+    - Add ClutterTimeline::stopped signal
+    The ::stopped signal is emitted either when a Timeline reaches full
+    completion, including eventual repeats; or when the Timeline has been
+    stopped through clutter_timeline_stop(). A boolean argument passed to
+    the signal handlers should be used to distinguish the two cases.
+
+    - Add ClutterGridLayout
+    This layout manager implements the same layout policy of GtkGrid.
+
+    - Fixes for ClutterKeyframeTransition
+
+    - Documentation fixes
+
+    - Fixes for building Clutter with Visual Studio
+    Including the GDK backend.
+
+    - Fixes for the Mac backend
+    Chain up to get a Cogl context after creating a GL context; this seems
+    to be enough to make the interactive tests run.
+
+  • List of bugs fixed since Clutter 1.11.2
+
+    [bugzilla.gnome.org]
+    #675336 - ClutterDropAction needs a ::drop-cancel signal
+    #675371 - Asserts when getting touch events
+    #676088 - Fixing picking in scroll-actor "breaks" gnome-control-center
+    #676032 - keyframe-transition: Documentation fixes
+    #676031 - keyframe-transition: Create a new interval if necessary
+    #676158 - table-layout: Remove unused animation helpers
+    #676334 - scroll-actor: Fix ->transition not being reset
+    #675890 - Passing NULL buffer to clutter_text_set_text() will not reset
+              the buffer and segfault
+    #676367 - actor: Add a custom scriptable "margin" property
+    #676068 - Setting size on ClutterFlowLayout container crashes
+    #676963 - text: Enable implicit color animations
+    #675396 - Possible bug in _clutter_paint_volume_axis_align
+    #674365 - Race during parallel build in tests/interactive/
+    #676827 - layout-manager: Add a new animation API
+    #677085 - examples: Allow optional animations in flow-layout
+    #677086 - box-layout: Remove unused BoxChild members
+    #677098 - Ensure we stop transitions on remove_child()
+    #676854 - timeline: Add a new "finished" signal
+    #677039 - Wrong allocation for WIDTH_FOR_HEIGHT actors
+    #675998 - Example 4.2 mixes up height and width
+    #677384 - doc: Add ClutterLayoutManagerPrivate to doc sections
+    #677284 - table-layout: Honor actors expand and alignment settings
+    #677283 - box-layout: Honor actor expand and alignment
+    #677372 - Add ClutterGridLayout
+    #677390 - events: Deliver touch events to actors
+
+Many thanks to:
+
+  Bastian Winkler, Chun-wei Fan, Bastien Nocera, Daniel Mustieles, Fran
+  Diéguez, Tomeu Vizoso, Tristan Van Berkom, Alexander Larsson, Alexandre
+  Franke, Bruno Brouard, Debarshi Ray, Dominique Bureau, Emanuele Aina, Matej
+  Urbančič, Mike Ruprecht, Piotr Drąg
+
+Clutter 1.11.2                                                       2012-04-30
+===============================================================================
+
+  • List of changes since Clutter 1.10
+
+    - Add ClutterScrollActor
+    An actor that can display a portion of its children, as well as
+    transitioning between visible regions.
+
+    - Make clutter_actor_allocate() respect the easing state of the actor
+    This allows animating allocations in layout managers.
+
+    - Add automatic expansion flags for ClutterActor
+    Actors can be marked to by allocated extra space by their parent, or
+    by the layout manager used by their parent; the expansion flags are also
+    recursive, so they can be set on a leaf node of the actor tree, and
+    propagate further up automatically.
+
+    - Add ClutterTransitionGroup and ClutterKeyframeTransition
+    Two ClutterTransition implementation that allow creating complex
+    transitions.
+
+    - Provide more C convenience API to ClutterTransition
+    Instead of dealing with ClutterInterval instances, it's possible to
+    define the starting and final values of a transition.
+
+    - Provide base geometric types: point, size, rectangle
+    Along with commodity API.
+
+    - New round of deprecations
+    ClutterMedia, ClutterCairoTexture, clutter_actor_animate(),
+    ClutterAnimation, ClutterAnimator, ClutterState, ClutterLayoutManager's
+    animation API.
+
+    - Return a valid default PaintVolume in more cases
+    For actors not overriding paint() or get_paint_volume() we can already
+    infer enough information on the area thatis going to be painted, and return
+    a valid paint volume. We specifically ignore any painting going on inside
+    a ClutterActor::paint signal handler, as that is considered legacy and on
+    its way to deprecation. People overriding the paint sequence of an actor
+    from within a paint signal handler, and painting outside the allocation,
+    are evil anyway.
+
+    - Depend on Pango 1.30
+
+    - Report distance as an axis on X11 with XInput 2 support enabled
+    Proximity information with XInput 2+ is reported as axis data on devices
+    with valuator classes.
+
+    - Documentation fixes
+
+  • List of bugs fixed since Clutter 1.10
+
+    #674510 - Changing a hidden child's position with new API shows the
+              actor
+    #672994 - Orca sometimes presents previously-entered text in GNOME
+              Shell Alt+F2 dialog
+    #652521 - get_length fails in Clutter.Path when length is greater
+              than 46340
+    #673644 - Scroll not working in document overview
+
+Many thanks to:
+
+  Jasper St. Pierre, Neil Roberts, Robert Bragg, Cosimo Cecchi, Rob Bradford,
+  Jonh Wendell, Piotr Drąg, Rico Tzschichholz, Alejandro Piñeiro,
+  Carles Ferrando, Christian Kirbach, Daniel Korostil, Daniel Mustieles,
+  Daniel Nylander, Fran Diéguez, Ihar Hrachyshka, Jordi Serratosa,
+  Kenneth Nielsen, Owen W. Taylor, Peter Hutterer, Rajesh Ranjan,
+  Rudolfs Mazurs, Stefano Facchini, Tristan Van Berkom, Viktor Nyberg,
+  Yuri Myasoedov, kkrothap@redhat.com.
+
+Clutter 1.9.16                                                       2012-03-19
+===============================================================================
+
+  • Clutter 1.10.0, release-candidate 1
+
+  • List of changes since Clutter 1.9.14
+
+    - Support implicit animatable properties
+    Various properties of ClutterActor can now be implicitly animated when
+    using the public setters, instead of going through the animation API;
+    this is an opt-in mechanism for the 1.x API series.
+
+    - Introduce paint nodes
+    ClutterPaintNode is an element of the render tree; it is used to store
+    the pipeline state and the geometry to be drawn. Actors have the ability
+    to be painted using the paint nodes by overriding the paint_node() virtual
+    function instead of the paint() virtual function. For the 1.x API series
+    the render tree will be consumed per-actor, but the plan is to build a
+    full tree as the authoritative source for the 2.x API series.
+
+    - Support Content delegates
+    ClutterContent is an interface that allows creating classes that will
+    painted in place of an actor's paint() virtual function. Clutter provides
+    two content types: Canvas, a Cairo-based immediate canvas for drawing the
+    contents of an actor; and Image, a content that will paint image data.
+
+    - ClutterText improvements
+    The caret of editable text actors is now centered, and the background
+    color will be respected when painting the actor.
+
+    - Support for the XInput 2.2 extension
+    Clutter will now relay touch events coming from the X server, as well
+    as precise scrolling delta, for devices with those two capabilities.
+    The support is still experimental, and limited to the X11 platform for
+    the time being.
+
+    - Translation updates
+    Slovenian, Assamese, Bulgarian, Spanish, Galician, Belarusian, Traditional
+    Chinese (Hong Kong and Taiwan), British English, Hebrew, Polish, Catalan,
+    Khmer, Russian, Finnish, Odia, Brazilian Portuguese, Danish, Lithuanian,
+    Portuguese, Czech, Swedish, French.
+
+  • List of bugs fixes since Clutter 1.9.14
+
+    [bugzilla.gnome.org]
+    #655491 - Text cursor/caret theming
+    #668801 - [NSApp finishLaunching]; missing in OSX backend
+    #656156 - Add lightness, brightness, and contrast effects
+    #671736 - Provide translations for "default:LTR" for RTL locales
+    #671779 - gdk: add new device types (GDK_SOURCE_TOUCHSCREEN,
+              GDK_SOURCE_TOUCHPAD)
+    #672316 - Flickering/redraw issues in multi stage
+
+Many thanks to:
+
+  Piotr Drąg, Chun-wei Fan, Daniel Mustieles, Fran Diéguez, Matej Urbančič,
+  Nilamdyuti Goswami, Alexander Shopov, Bruce Cowan, Florian Müllner,
+  Gil Forcada, Ihar Hrachyshka, Stefano Facchini, Мирослав Николић,
+  Adam Matoušek, Antonio Fernandes C. Neto, Aurimas Černius, Bruno Brouard,
+  Carles Ferrando, Chao-Hsiung Liao, Daniel Nylander,  Duarte Loreto,
+  Jasper St. Pierre, Joseph Scheuhammer, Kenneth Nielsen, Khoem Sokhem,
+  Lionel Landwerlin, ManojKumar Giri, Marek Černocký, Timo Jyrinki,
+  Tristan Van Berkom, Yuri Myasoedov
+
+Clutter 1.9.14                                                       2012-03-05
+===============================================================================
+
+  • List of changes since Clutter 1.9.12
+
+    - Support custom versioning boundaries for the API
+    Now that GLib provides macros for changing the minimum required and
+    maximum allowed version of a library, Clutter can respect the
+    boundaries expressed using CLUTTER_VERSION_MIN_REQUIRED and
+    CLUTTER_VERSION_MAX_ALLOWED.
+
+    - Add version information to deprecations
+
+    - Move all deprecated symbols to separate header files
+
+    - Documentation and annotation fixes.
+
+    - Accessibility fixes in Cally
+    Do not use ClutterActor:name as the accessible name, and do not
+    provide the extents of an accessible object if the actor to which
+    it refers is not on screen.
+
+    - Updates to the Wayland compositor and client support
+    Clutter now allows being used for creating hybrid Wayland/X11
+    compositors, working with KMS and evdev directly.
+
+    - Translation updates: Bulgarian, Ukranian, Galician, Uyghur, Belarusian,
+    Brazilian Portuguese, Telugu, Slovenian, Assamese, Serbian.
+
+  • List of bug fixes since Clutter 1.9.12
+
+    [bugzilla.gnome.org]
+    #670680 - "make check" assumes gdk backend will be built
+
+Many thanks to:
+
+  Robert Bragg, Neil Roberts, Alejandro Piñeiro, Chun-wei Fan,
+  Alexander Shopov, Daniel Korostil, Daniel Mustieles, Fran Diéguez,
+  Gheyret Kenji, Giovanni Campagna, Ihar Hrachyshka, Jonh Wendell,
+  Krishnababu Krothapalli, Matej Urbančič, Nilamdyuti Goswami,
+  Мирослав Николић
+
+Clutter 1.9.12                                                       2012-02-23
+===============================================================================
+
+  • List of changes since Clutter 1.9.10
+
+    - Add ClutterTimeline:repeat-count and deprecate :loop
+    The :repeat-count property supercedes the :loop property, and it
+    provides a way to specify the number of repeats that a timeline
+    should perform - with the option of specifying an "infinity" value.
+
+    - Add a progress mode for ClutterTimeline
+    This begins the "soft deprecation" of ClutterAlpha. Instead of
+    requiring a full object to compute an easing function out of a
+    linear progress coming from ClutterTimeline, we should have this
+    functionality on ClutterTimeline itself. Since ClutterAlpha is
+    still exposed in API that we cannot deprecate (such as virtual
+    functions) we cannot deprecate it fully, and we'll have to wait
+    until the 2.0 API bump to get rid of it.
+
+    - Fix ClutterBoxLayout allocation
+    Since the update of the box layout algorithm there have been a
+    bunch of regressions; now the layout works as intended.
+
+    - Improve the performance of the shader-based effect in Clutter
+    The effects shipped with Clutter now use the CoglSnippet API
+    internally, which allows efficient generation of the shader code;
+    they also ensure that the shader is generated once per class, and
+    shared across instances. These changes should improve performance
+    when using effects provided by Clutter.
+
+    - Update the internal usage of Cogl API
+    Clutter should strive to use the Cogl 2.0 API internally and not
+    mix the 1.0 and 2.0 API.
+
+    - Allow accessing Wayland input devices
+    This is a change that allows Clutter-based toolkits to interact
+    with Wayland in a meaningful way for operations like resize and
+    move.
+
+    - Add a convenience CLUTTER_BIND_ALL enumeration
+    This allows binding both position and size of an actor when using
+    a ClutterBindConstraint.
+
+    - Cally updates
+    Use the newly added API to reimplement focus tracking.
+
+    - Visual Studio project updates
+
+    - Add clutter_text_coords_to_position()
+    This method roundtrips the position_to_coords() one, and allows
+    retrieving the index of the character at the given actor-relative
+    coordinates.
+
+    - Documentation updates.
+
+    - Introspection annotation fixes.
+
+  • List of bugs fixed since Clutter 1.9.10
+
+    [bugzilla.gnome.org]
+    #669730 - actor: Fix and improve add_child_at_index()
+    #669291 - box layout bug when callin the clutter_actor_hide() function
+    #667540 - Desynchronized size between ClutterStageCogl and ClutterStageX11
+    #670433 - clutter-drop-action: annotation fixes for some signals
+    #670402 - CRITICAL warning when ClutterDragAction has threshold > 0
+
+    [bugzilla.clutter-project.org]
+    #2515 - Setting a non-default stage fullscreen before showing it doesn't work
+
+
+Clutter 1.9.10                                                       2012-02-06
+===============================================================================
+
+  • List of changes since Clutter 1.9.8
+
+    - Provide symbolic names for pointer buttons
+    The primary, middle, and secondary pointer buttons now have simple and
+    easy to remember constants that can be used in place of the "magic"
+    numbers.
+
+    - Add ClutterActorIter
+    A simple API, using a stack allocated opaque structure, for safely and
+    efficiently traverse the children of a ClutterActor.
+
+    - Fix regression introduced by the default FixedLayout layout manager
+    Existing ClutterActor subclasses using their own layout management should
+    now work exactly like in Clutter 1.8.
+
+    - Documentation fixes
+    Including introspection annotations fixes.
+
+    - Updates to the Wayland backend
+    The Wayland client backend is now up to date with the 0.85 release of
+    the Wayland protocol.
+
+  • Bugs fixed since Clutter 1.9.8
+
+    [bugzilla.gnome.org]
+    #668692 - Add symbolic names for left, right and middle buttons
+    #668669 - Add iterator API for ClutterActor
+    #667840 - Add annotations from Vala bindings
+    #669360 - clutter-backend-eglnative.h missing in disted tarball
+    #668951 - Fix warnings when weak_unreffing a finalized object
+
+Many thanks to:
+
+  Rob Bradford, Tristan Van Berkom, Chao-Hsiung Liao, Evan Nemerson,
+  Kerrick Staley, Matej Urbančič
+
+Clutter 1.9.8                                                        2012-01-24
+===============================================================================
+
+  • List of changes since Clutter 1.9.6
+
+    - Fix regressions in users of deprecated API
+    Also, allow to mix the new Actor API with the old Container API without
+    breaking.
+
+    - Add GResource support in ClutterScript
+    GResource is a new infrastructure in GIO that allows to compile resources
+    like UI builder files and image data into a shared library or an
+    executable. A newly added method to ClutterScript makes it possible to
+    load a UI definition from a resource, like it's done for files and
+    data.
+
+    - Update the Wayland client backend
+    The SHM transport API has changed upstream, and the Clutter backend has
+    been updated to reflect it.
+
+Many thanks to:
+
+  Rob Bradford, Fran Diéguez
+
+Clutter 1.9.6                                                        2012-01-19
+===============================================================================
+
+  • List of changes since Clutter 1.9.4
+
+    - Deprecate clutter_actor_show_all() and clutter_actor_hide_all()
+    The latter never did make a lot of sense: hiding the parent will
+    effectively hide the children as well; the former was there only for
+    convenience, but Actors are visible by default.
+
+    - Gracefully handle existing code
+    The changes in ClutterActor introduced regressions in existing code
+    because of the new functionaly that was introduced to replace deprecated
+    classes like Box and Group. These regressions have hopefully been fixed;
+    Clutter 1.9.6 has been tested with a project as complex as the GNOME
+    Shell.
+
+    - Fix build with binutils-gold
+    The private dependencies were not used when building Clutter, and this
+    made the Gold linker angry.
+
+    - Allow tracking of an actor's first and last child
+    ClutterActor has two new properties, :first-child and :last-child; these
+    are read-only properties that can be used by toolkits based on Clutter
+    to track the first and last child whenever they change.
+
+    - Bump the Cogl dependency
+    The 1.9.4 release depended on Cogl ≥ 1.9.4, but the minimum required
+    version was not bumped along with the changes.
+
+  • List of bugs fixed since Clutter 1.9.4
+
+    [bugzilla.gnome.org]
+    #668137 - FTBFS: pangoft2 check seems to be broken
+
+Clutter 1.9.4                                                        2012-01-17
+===============================================================================
+
+  • List of changes since Clutter 1.9.2
+
+    - New scene graph API in ClutterActor
+    ClutterActor now provides the API for adding, removing, and iterating
+    over the list of children; this deprecates most of the ClutterContainer
+    API. ClutterActor implements ClutterContainer as well, which means that
+    all actors can be containers.
+
+    - Layout management updates
+    ClutterActor now have an horizontal and vertical alignment properties
+    that will be used when added to a parent; a margin has also been added
+    to the ClutterActor class. Both margin and alignment will be automatically
+    managed during the allocation, so they will work out of the box. It is
+    also possible to set a ClutterLayoutManager delegate object on any
+    ClutterActor instance: the LayoutManager will take care of the layout
+    policy for the children of an actor.
+
+    - Add ClutterTextBuffer
+    The ClutterTextBuffer class provides a storage for the contents of
+    a ClutterText actor; the same instance can be shared across different
+    actors as well. The main use for ClutterTextBuffer is implementing
+    secure memory storage for the contents of a ClutterText in password
+    mode.
+
+    - Deprecations
+    ClutterGroup, ClutterBox, and ClutterRectangle have been deprecated; their
+    functionality is now available directly in ClutterActor. The old child
+    actor management API in ClutterActor and ClutterContainer has been
+    deprecated as well. Other deprecations include the ClutterStage
+    fog-related properties and API; the ClutterContainer.sort_depth_order(),
+    raise(), and lower() virtual functions; the internal child push and
+    pop methods on ClutterActor.
+
+    - ClutterTimeline can parse markers from ClutterScript
+    Markers can now be defined inside ClutterScript, and a ClutterTimeline
+    will be able to automatically add them from a UI definition.
+
+    - Add a diagnostic mode
+    Similar to the GLib diagnostic mode, Clutter now supports an environment
+    variable that will print out diagnostic messages for deprecations and
+    warnings that can only be detected at run-time.
+
+    - Wayland backend updates
+    The wayland backend now tracks the latest API changes in the client API,
+    and Clutter now provides a Wayland surface actor that allows to write
+    Wayland compositors, similarly to the X11TexturePixmap actor for the
+    X11 backend.
+
+  • List of bugs fixed since Clutter 1.9.2
+
+    [bugzilla.gnome.org]
+    #665040 - The offscreen effect always recreates the texture if
+              create_texture() is overridden to change the size
+    #665052 - The internal effects should queue a repaint on the effect not
+              on the actor when a property changes
+    #664996 - clutter_state_set_key (allow-none)
+    #664336 - path: Fix introspection annotations
+    #664252 - in case GLSL shader fails to compile clutter-shader-effect.c
+              should print out position in source code
+    #664582 - lookingGlass: Fix global key press handler
+    #660997 - Make _clutter_actor_queue_redraw_with_clip or an equivalent
+              public
+
+Many thanks to:
+
+  Chun-wei Fan, Robert Bragg, Rob Bradford, Neil Roberts, Bastian Winkler,
+  Fran Diéguez, Jasper St. Pierre, Matej Urbančič, Piotr Drąg,
+  Alexander Shopov, Bastien Nocera, Daniel Mustieles, Jeremy Moles,
+  Jovan Naumovski, Kjartan Maraas, Lucian Adrian Grijincu, Manuel Osdoba,
+  Ryan Lortie
+
+Clutter 1.9.2                                                        2011-11-22
+===============================================================================
+
+  • List of changes since Clutter 1.8
+
+    - Multi-backend build, and run-time backend selection
+    Clutter can be built with support for multiple backends in the same
+    shared library; the backend singleton is determined at run-time,
+    either with the default backend for the platform, or using the value
+    of the CLUTTER_BACKEND environment variable.
+
+    - GDK windowing system backend
+    A new backend has been added, which uses the GDK API for creating the
+    drawing surface, as well as receiving the windowing system and input
+    events.
+
+    - Show a hint when ClutterText is in password mode
+    If the password-hint-time ClutterSettings property is set to a non
+    zero value, the last character entered inside a ClutterText actor when
+    in password mode will be shown in plain for the duration of the timeout,
+    before being replaced by the glyph chosen as the password character.
+
+    - Improve Windows build support
+    Clutter now provides project files to build the library using Visual
+    Studio 9 and Visual Studio 10. Also, the scripts to build Clutter using
+    MinGW have been improved.
+
+    - Remove the requirement for using clutter_threads_init()
+    Threads are initialized by default (depending on the platform), so there
+    is no need to call clutter_threads_init().
+
+    - Deprecate the default ClutterStage
+    The semantics of the default Stage were not obvious, and had the tendency
+    to confuse the user.
+
+    - Move the deprecated headers into their own directory
+    This should help developers identify the deprecated API.
+
+    - Change deprecation policy
+    Deprecated functions are now marked using compiler annotations, instead
+    of being forcibly disabled through pre-processor directives from the
+    headers. Deprecations will cause compiler warnings, and thus are enabled
+    by default. If you're building your project with compiler flags that
+    consider every warning a fatal error, you can use the symbol
+    CLUTTER_DISABLE_DEPRECATION_WARNINGS to disable the deprecation warnings.
+
+    - Translation updates
+    Portuguese, Assamese, Punjabi, Tamil, Oriya, Telugu, French, German,
+    Danish, Traditional Chinese (Hong Kong and Taiwan), Catalan, Esperanto,
+    Lithuanian, Galician, Norwegian bokmål, Slovenian, Hebrew, Bulgarian.
+
+  • List of bugs fixed since Clutter 1.8
+
+    652588 - add support for password hint in ClutterText
+    659625 - mingw32: Update the build script to compile 1.8.0
+    659601 - offscreen effects on children of containers also with an
+             offscreen effect get a wrong viewport
+    659928 - Two strings are not marked as translatable
+    659893 - clutter-main: Reword translator comment for default:LTR
+    656663 - Remove internal usage of ClutterGeometry in StageWindow
+    660354 - Add paint-deform-tiles option to CLUTTER_DEBUG
+    660471 - ClutterActor: Add clutter_actor_has_effects
+    660512 - ClutterShaderEffect recompiles the shader for every instance
+    660623 - clutter-actor-meta: Fix _clutter_meta_group_has_metas_no_internal
+    660985 - memory leak in clutter_box_layout.c
+    661015 - Add clutter_unicode_to_keyval function
+    660786 - Deprecate clutter_[sg]et_font_flags()
+    661887 - auto-resize of ClutterCairoTexture does not work correctly
+    657434 - Add a GDK backend to Clutter
+    663332 - orca reads my password in gnome-shell policykit dialogs
+    663594 - Minor whitespace parsing bug in clutter_color_from_string
+    663733 - clutter-stage-x11: Make sure to set geometry x and y
+    651718 - Make tests work on platforms supporting only a single stage
+    663999 - The removal of per-backend CLUTTER_VBLANK envvar had unwanted
+             cruft in the Win32 backend
+    663720 - DeformEffect: Avoid redrawing actors on vertices invalidation
+    663636 - Use newer Cogl API in ClutterDeformEffect
+
+Special thanks to
+
+  Chun-wei Fan, for building, testing, and keeping up to date the Visual
+  Studio project files.
+
+Many thanks to:
+
+  Neil Roberts, Rico Tzschichholz, Robert Bragg, Adel Gadllah,
+  Lionel Landwerlin, Alexandre Franke, Colin Walters, Daniel Mustieles,
+  Giovanni Campagna, Piotr Drąg, krishnababu k, A S Alam, Alexander Shopov,
+  Algimantas Margevičius, Ask H. Larsen, Bruno Brouard, Carles Ferrando,
+  Chao-Hsiung Liao, Craig R. Hughes, Damien Lespiau, Duarte Loreto,
+  Florian Müllner, Fran Dieguez, Fran Diéguez, Håkon Løvdal, I Felix,
+  Jasper St. Pierre, Jorge González, Joseph Scheuhammer, Kjartan Maraas,
+  Kristjan SCHMIDT, Manoj Kumar Giri, Marc-André Lureau, Mario Blättermann,
+  Matej Urbančič, Matthias Clasen, Nilamdyuti Goswami, Sunjin Yang,
+  Tomeu Vizoso, Yaron Shahrabani, Zan Dobersek, Мирослав Николић.
+
 Clutter 1.7.90                                                       2011-09-12
 ===============================================================================
 

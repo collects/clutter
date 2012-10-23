@@ -51,36 +51,10 @@
  *
  * <example id="example-clutter-bin-layout">
  *  <title>How to pack actors inside a BinLayout</title>
- *  <para>The following code shows how to build a composite actor with
- *  a texture and a background, and add controls overlayed on top. The
- *  background is set to fill the whole allocation, whilst the texture
- *  is centered; there is a control in the top right corner and a label
- *  in the bottom, filling out the whole allocated width.</para>
  *  <programlisting>
- *  ClutterLayoutManager *manager;
- *  ClutterActor *box;
- *
- *  /&ast; create the layout first &ast;/
- *  layout = clutter_bin_layout_new (CLUTTER_BIN_ALIGNMENT_CENTER,
- *                                   CLUTTER_BIN_ALIGNMENT_CENTER);
- *  box = clutter_box_new (layout); /&ast; then the container &ast;/
- *
- *  /&ast; we can use the layout object to add actors &ast;/
- *  clutter_bin_layout_add (CLUTTER_BIN_LAYOUT (layout), background,
- *                          CLUTTER_BIN_ALIGNMENT_FILL,
- *                          CLUTTER_BIN_ALIGNMENT_FILL);
- *  clutter_bin_layout_add (CLUTTER_BIN_LAYOUT (layout), icon,
- *                          CLUTTER_BIN_ALIGNMENT_CENTER,
- *                          CLUTTER_BIN_ALIGNMENT_CENTER);
- *
- *  /&ast; align to the bottom left &ast;/
- *  clutter_bin_layout_add (CLUTTER_BIN_LAYOUT (layout), label,
- *                          CLUTTER_BIN_ALIGNMENT_START,
- *                          CLUTTER_BIN_ALIGNMENT_END);
- *  /&ast; align to the top right &ast;/
- *  clutter_bin_layout_add (CLUTTER_BIN_LAYOUT (layout), button,
- *                          CLUTTER_BIN_ALIGNMENT_END,
- *                          CLUTTER_BIN_ALIGNMENT_START);
+ * <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" parse="text" href="../../../../examples/bin-layout.c">
+ *   <xi:fallback>FIXME: MISSING XINCLUDE CONTENT</xi:fallback>
+ * </xi:include>
  *  </programlisting>
  * </example>
  *
@@ -93,9 +67,12 @@
 
 #include <math.h>
 
-#include "clutter-actor.h"
+#define CLUTTER_DISABLE_DEPRECATION_WARNINGS
+#include "deprecated/clutter-container.h"
+#include "deprecated/clutter-bin-layout.h"
+
+#include "clutter-actor-private.h"
 #include "clutter-animatable.h"
-#include "clutter-bin-layout.h"
 #include "clutter-child-meta.h"
 #include "clutter-debug.h"
 #include "clutter-enum-types.h"
@@ -149,6 +126,8 @@ enum
 
 static GParamSpec *layer_props[PROP_LAYER_LAST] = { NULL, };
 static GParamSpec *bin_props[PROP_LAST] = { NULL, };
+
+GType clutter_bin_layer_get_type (void);
 
 G_DEFINE_TYPE (ClutterBinLayer,
                clutter_bin_layer,
@@ -335,16 +314,20 @@ clutter_bin_layout_get_preferred_width (ClutterLayoutManager *manager,
                                         gfloat               *min_width_p,
                                         gfloat               *nat_width_p)
 {
-  GList *children = clutter_container_get_children (container);
-  GList *l;
+  ClutterActor *actor = CLUTTER_ACTOR (container);
+  ClutterActorIter iter;
+  ClutterActor *child;
   gfloat min_width, nat_width;
 
   min_width = nat_width = 0.0;
 
-  for (l = children; l != NULL; l = l->next)
+  clutter_actor_iter_init (&iter, actor);
+  while (clutter_actor_iter_next (&iter, &child))
     {
-      ClutterActor *child = l->data;
       gfloat minimum, natural;
+
+      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
+        continue;
 
       clutter_actor_get_preferred_width (child, for_height,
                                          &minimum,
@@ -359,8 +342,6 @@ clutter_bin_layout_get_preferred_width (ClutterLayoutManager *manager,
 
   if (nat_width_p)
     *nat_width_p = nat_width;
-
-  g_list_free (children);
 }
 
 static void
@@ -370,16 +351,20 @@ clutter_bin_layout_get_preferred_height (ClutterLayoutManager *manager,
                                          gfloat               *min_height_p,
                                          gfloat               *nat_height_p)
 {
-  GList *children = clutter_container_get_children (container);
-  GList *l;
+  ClutterActor *actor = CLUTTER_ACTOR (container);
+  ClutterActorIter iter;
+  ClutterActor *child;
   gfloat min_height, nat_height;
 
   min_height = nat_height = 0.0;
 
-  for (l = children; l != NULL; l = l->next)
+  clutter_actor_iter_init (&iter, actor);
+  while (clutter_actor_iter_next (&iter, &child))
     {
-      ClutterActor *child = l->data;
       gfloat minimum, natural;
+
+      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
+        continue;
 
       clutter_actor_get_preferred_height (child, for_width,
                                           &minimum,
@@ -394,12 +379,11 @@ clutter_bin_layout_get_preferred_height (ClutterLayoutManager *manager,
 
   if (nat_height_p)
     *nat_height_p = nat_height;
-
-  g_list_free (children);
 }
 
 static gdouble
-get_bin_alignment_factor (ClutterBinAlignment alignment)
+get_bin_alignment_factor (ClutterBinAlignment alignment,
+                          ClutterTextDirection text_dir)
 {
   switch (alignment)
     {
@@ -407,13 +391,34 @@ get_bin_alignment_factor (ClutterBinAlignment alignment)
       return 0.5;
 
     case CLUTTER_BIN_ALIGNMENT_START:
-      return 0.0;
+      return text_dir == CLUTTER_TEXT_DIRECTION_LTR ? 0.0 : 1.0;
 
     case CLUTTER_BIN_ALIGNMENT_END:
-      return 1.0;
+      return text_dir == CLUTTER_TEXT_DIRECTION_LTR ? 1.0 : 0.0;
 
     case CLUTTER_BIN_ALIGNMENT_FIXED:
     case CLUTTER_BIN_ALIGNMENT_FILL:
+      return 0.0;
+    }
+
+  return 0.0;
+}
+
+static gdouble
+get_actor_align_factor (ClutterActorAlign alignment)
+{
+  switch (alignment)
+    {
+    case CLUTTER_ACTOR_ALIGN_CENTER:
+      return 0.5;
+
+    case CLUTTER_ACTOR_ALIGN_START:
+      return 0.0;
+
+    case CLUTTER_ACTOR_ALIGN_END:
+      return 1.0;
+
+    case CLUTTER_ACTOR_ALIGN_FILL:
       return 0.0;
     }
 
@@ -426,53 +431,115 @@ clutter_bin_layout_allocate (ClutterLayoutManager   *manager,
                              const ClutterActorBox  *allocation,
                              ClutterAllocationFlags  flags)
 {
-  GList *children = clutter_container_get_children (container);
-  GList *l;
   gfloat allocation_x, allocation_y;
   gfloat available_w, available_h;
+  ClutterActor *actor, *child;
+  ClutterActorIter iter;
 
   clutter_actor_box_get_origin (allocation, &allocation_x, &allocation_y);
   clutter_actor_box_get_size (allocation, &available_w, &available_h);
 
-  for (l = children; l != NULL; l = l->next)
+  actor = CLUTTER_ACTOR (container);
+
+  clutter_actor_iter_init (&iter, actor);
+  while (clutter_actor_iter_next (&iter, &child))
     {
-      ClutterActor *child = l->data;
       ClutterLayoutMeta *meta;
       ClutterBinLayer *layer;
       ClutterActorBox child_alloc = { 0, };
       gdouble x_align, y_align;
-      gboolean x_fill, y_fill;
+      gboolean x_fill, y_fill, is_fixed_position_set;
+      float fixed_x, fixed_y;
+
+      if (!CLUTTER_ACTOR_IS_VISIBLE (child))
+        continue;
 
       meta = clutter_layout_manager_get_child_meta (manager,
                                                     container,
                                                     child);
       layer = CLUTTER_BIN_LAYER (meta);
 
-      if (layer->x_align == CLUTTER_BIN_ALIGNMENT_FIXED)
-        child_alloc.x1 = clutter_actor_get_x (child);
+      fixed_x = fixed_y = 0.f;
+      g_object_get (child,
+                    "fixed-position-set", &is_fixed_position_set,
+                    "fixed-x", &fixed_x,
+                    "fixed-y", &fixed_y,
+                    NULL);
+
+      /* XXX:2.0 - remove the FIXED alignment, and just use the fixed position
+       * of the actor if one is set
+       */
+      if (is_fixed_position_set ||
+          layer->x_align == CLUTTER_BIN_ALIGNMENT_FIXED)
+	{
+          if (is_fixed_position_set)
+            child_alloc.x1 = fixed_x;
+          else
+            child_alloc.x1 = clutter_actor_get_x (child);
+	}
       else
         child_alloc.x1 = allocation_x;
 
-      if (layer->y_align == CLUTTER_BIN_ALIGNMENT_FIXED)
-        child_alloc.y1 = clutter_actor_get_y (child);
+      if (is_fixed_position_set ||
+          layer->y_align == CLUTTER_BIN_ALIGNMENT_FIXED)
+	{
+	  if (is_fixed_position_set)
+            child_alloc.y1 = fixed_y;
+          else
+	    child_alloc.y1 = clutter_actor_get_y (child);
+	}
       else
         child_alloc.y1 = allocation_y;
 
       child_alloc.x2 = available_w;
       child_alloc.y2 = available_h;
 
-      x_fill = (layer->x_align == CLUTTER_BIN_ALIGNMENT_FILL);
-      y_fill = (layer->y_align == CLUTTER_BIN_ALIGNMENT_FILL);
-      x_align = get_bin_alignment_factor (layer->x_align);
-      y_align = get_bin_alignment_factor (layer->y_align);
+      if (clutter_actor_needs_expand (child, CLUTTER_ORIENTATION_HORIZONTAL))
+        {
+          ClutterActorAlign align;
+
+          align = clutter_actor_get_x_align (child);
+          x_fill = align == CLUTTER_ACTOR_ALIGN_FILL;
+          x_align = get_actor_align_factor (align);
+        }
+      else
+        {
+          ClutterTextDirection text_dir;
+
+          x_fill = (layer->x_align == CLUTTER_BIN_ALIGNMENT_FILL);
+
+          text_dir = clutter_actor_get_text_direction (child);
+
+          if (!is_fixed_position_set)
+            x_align = get_bin_alignment_factor (layer->x_align, text_dir);
+          else
+            x_align = 0.0;
+        }
+
+      if (clutter_actor_needs_expand (child, CLUTTER_ORIENTATION_VERTICAL))
+        {
+          ClutterActorAlign align;
+
+          align = clutter_actor_get_y_align (child);
+          y_fill = align == CLUTTER_ACTOR_ALIGN_FILL;
+          y_align = get_actor_align_factor (align);
+        }
+      else
+        {
+          y_fill = (layer->y_align == CLUTTER_BIN_ALIGNMENT_FILL);
+
+          if (!is_fixed_position_set)
+            y_align = get_bin_alignment_factor (layer->y_align,
+                                                CLUTTER_TEXT_DIRECTION_LTR);
+          else
+            y_align = 0.0;
+        }
 
       clutter_actor_allocate_align_fill (child, &child_alloc,
                                          x_align, y_align,
                                          x_fill, y_fill,
                                          flags);
     }
-
-  g_list_free (children);
 }
 
 static GType
@@ -579,6 +646,9 @@ clutter_bin_layout_class_init (ClutterBinLayoutClass *klass)
    * by the #ClutterBinLayout
    *
    * Since: 1.2
+   *
+   * Deprecated: 1.12: Use the #ClutterActor:x-expand and the
+   *   #ClutterActor:x-align properties on #ClutterActor instead.
    */
   bin_props[PROP_X_ALIGN] =
     g_param_spec_enum ("x-align",
@@ -596,6 +666,9 @@ clutter_bin_layout_class_init (ClutterBinLayoutClass *klass)
    * by the #ClutterBinLayout
    *
    * Since: 1.2
+   *
+   * Deprecated: 1.12: Use the #ClutterActor:y-expand and the
+   *   #ClutterActor:y-align properties on #ClutterActor instead.
    */
   bin_props[PROP_Y_ALIGN] =
     g_param_spec_enum ("y-align",
@@ -608,22 +681,14 @@ clutter_bin_layout_class_init (ClutterBinLayoutClass *klass)
 
   gobject_class->set_property = clutter_bin_layout_set_property;
   gobject_class->get_property = clutter_bin_layout_get_property;
-  g_object_class_install_properties (gobject_class,
-                                     PROP_LAST,
-                                     bin_props);
+  g_object_class_install_properties (gobject_class, PROP_LAST, bin_props);
 
-  layout_class->get_preferred_width =
-    clutter_bin_layout_get_preferred_width;
-  layout_class->get_preferred_height =
-    clutter_bin_layout_get_preferred_height;
-  layout_class->allocate =
-    clutter_bin_layout_allocate;
-  layout_class->create_child_meta =
-    clutter_bin_layout_create_child_meta;
-  layout_class->get_child_meta_type =
-    clutter_bin_layout_get_child_meta_type;
-  layout_class->set_container =
-    clutter_bin_layout_set_container;
+  layout_class->get_preferred_width = clutter_bin_layout_get_preferred_width;
+  layout_class->get_preferred_height = clutter_bin_layout_get_preferred_height;
+  layout_class->allocate = clutter_bin_layout_allocate;
+  layout_class->create_child_meta = clutter_bin_layout_create_child_meta;
+  layout_class->get_child_meta_type = clutter_bin_layout_get_child_meta_type;
+  layout_class->set_container = clutter_bin_layout_set_container;
 }
 
 static void
@@ -674,6 +739,9 @@ clutter_bin_layout_new (ClutterBinAlignment x_align,
  * be set as the default alignment policies
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: Use the #ClutterActor:x-align and
+ *   #ClutterActor:y-align properties of #ClutterActor instead.
  */
 void
 clutter_bin_layout_set_alignment (ClutterBinLayout    *self,
@@ -732,6 +800,9 @@ clutter_bin_layout_set_alignment (ClutterBinLayout    *self,
  * instead
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: Use the #ClutterActor:x-align and the
+ *   #ClutterActor:y-align properties of #ClutterActor instead.
  */
 void
 clutter_bin_layout_get_alignment (ClutterBinLayout    *self,
@@ -798,6 +869,8 @@ clutter_bin_layout_get_alignment (ClutterBinLayout    *self,
  * #ClutterBinLayout
  *
  * Since: 1.2
+ *
+ * Deprecated: 1.12: Use clutter_actor_add_child() instead.
  */
 void
 clutter_bin_layout_add (ClutterBinLayout    *self,

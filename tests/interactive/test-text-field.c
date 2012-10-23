@@ -3,29 +3,6 @@
 #include <clutter/clutter.h>
 
 static void
-on_entry_paint (ClutterActor *actor,
-                gpointer      data)
-{
-  ClutterActorBox allocation = { 0, };
-  gfloat width, height;
-
-  clutter_actor_get_allocation_box (actor, &allocation);
-  clutter_actor_box_clamp_to_pixel (&allocation);
-  clutter_actor_box_get_size (&allocation, &width, &height);
-
-  cogl_set_source_color4ub (255, 255, 255, 24);
-#if 0
-  /* this spills over to the next actor in the paint cycle, and retains
-   * the same source color
-   */
-  cogl_path_round_rectangle (0, 0, width, height, 4.0, 1.0);
-  cogl_path_stroke ();
-#else
-  cogl_rectangle (0, 0, width, height);
-#endif
-}
-
-static void
 on_entry_activate (ClutterText *text,
                    gpointer     data)
 {
@@ -57,10 +34,8 @@ on_captured_event (ClutterText *text,
 
   c = clutter_event_get_key_unicode (event);
   keyval = clutter_event_get_key_symbol (event);
-  if (keyval == CLUTTER_KEY_u)
+  if (keyval == CLUTTER_KEY_U)
     {
-      ClutterModifierType mods = clutter_event_get_state (event);
-
       if (is_unicode_mode)
         {
           GString *str = g_object_get_data (G_OBJECT (text), "unicode-str");
@@ -77,8 +52,7 @@ on_captured_event (ClutterText *text,
           return FALSE;
         }
 
-      if ((mods & CLUTTER_CONTROL_MASK) &&
-          (mods & CLUTTER_SHIFT_MASK))
+      if (clutter_event_has_control_modifier (event))
         {
           PangoAttrList *attrs;
           PangoAttribute *a;
@@ -122,7 +96,7 @@ on_captured_event (ClutterText *text,
 
       g_string_append (str, buf);
 
-      g_print ("added '%s' to '%s' (len:%d)",
+      g_print ("added '%s' to '%s' (len:%d)\n",
                buf,
                str->str,
                (int) str->len);
@@ -252,12 +226,10 @@ create_entry (const ClutterColor *color,
   clutter_text_set_cursor_color (CLUTTER_TEXT (retval), &selection);
   clutter_text_set_max_length (CLUTTER_TEXT (retval), max_length);
   clutter_text_set_selected_text_color (CLUTTER_TEXT (retval), &selected_text);
+  clutter_actor_set_background_color (retval, CLUTTER_COLOR_LightGray);
 
   g_signal_connect (retval, "activate",
                     G_CALLBACK (on_entry_activate),
-                    NULL);
-  g_signal_connect (retval, "paint",
-                    G_CALLBACK (on_entry_paint),
                     NULL);
   g_signal_connect (retval, "captured-event",
                     G_CALLBACK (on_captured_event),
@@ -271,63 +243,68 @@ test_text_field_main (gint    argc,
                       gchar **argv)
 {
   ClutterActor *stage;
-  ClutterActor *box, *entry;
+  ClutterActor *box, *label, *entry;
   ClutterLayoutManager *table;
 
   if (clutter_init (&argc, &argv) != CLUTTER_INIT_SUCCESS)
-    return 1;
+    return EXIT_FAILURE;
 
   stage = clutter_stage_new ();
   clutter_stage_set_title (CLUTTER_STAGE (stage), "Text Fields");
-  clutter_stage_set_color (CLUTTER_STAGE (stage), CLUTTER_COLOR_Black);
+  clutter_actor_set_background_color (stage, CLUTTER_COLOR_Black);
   g_signal_connect (stage, "destroy", G_CALLBACK (clutter_main_quit), NULL);
 
   table = clutter_table_layout_new ();
   clutter_table_layout_set_column_spacing (CLUTTER_TABLE_LAYOUT (table), 6);
   clutter_table_layout_set_row_spacing (CLUTTER_TABLE_LAYOUT (table), 6);
 
-  box = clutter_box_new (table);
-  clutter_container_add_actor (CLUTTER_CONTAINER (stage), box);
+  box = clutter_actor_new ();
+  clutter_actor_set_layout_manager (box, table);
   clutter_actor_add_constraint (box, clutter_bind_constraint_new (stage, CLUTTER_BIND_WIDTH, -24.0));
   clutter_actor_add_constraint (box, clutter_bind_constraint_new (stage, CLUTTER_BIND_HEIGHT, -24.0));
   clutter_actor_set_position (box, 12, 12);
+  clutter_actor_add_child (stage, box);
 
-  clutter_box_pack (CLUTTER_BOX (box),
-                    create_label (CLUTTER_COLOR_White, "<b>Input field:</b>"),
-                    "row", 0,
-                    "column", 0,
-                    "x-expand", FALSE,
-                    "y-expand", FALSE,
-                    NULL);
+  label = create_label (CLUTTER_COLOR_White, "<b>Input field:</b>");
+  g_object_set (label, "min-width", 150.0, NULL);
+  clutter_actor_add_child (box, label);
+  clutter_layout_manager_child_set (table, CLUTTER_CONTAINER (box), label,
+                                    "row", 0,
+                                    "column", 0,
+                                    "x-expand", FALSE,
+                                    "y-expand", FALSE,
+                                    NULL);
 
-  entry = create_entry (CLUTTER_COLOR_LightGray, "<i>some</i> text", 0, 0);
-  clutter_box_pack (CLUTTER_BOX (box),
-                    entry,
-                    "row", 0,
-                    "column", 1,
-                    "x-expand", TRUE,
-                    "x-fill", TRUE,
-                    "y-expand", FALSE,
-                    NULL);
-
-  clutter_box_pack (CLUTTER_BOX (box),
-                    create_label (CLUTTER_COLOR_White, "<b>A very long password field:</b>"),
-                    "row", 1,
-                    "column", 0,
-                    "x-expand", FALSE,
-                    "y-expand", FALSE,
-                    NULL);
-
-  clutter_box_pack (CLUTTER_BOX (box),
-                    create_entry (CLUTTER_COLOR_LightGray, "password", '*', 8),
-                    "row", 1,
-                    "column", 1,
-                    "x-expand", TRUE,
-                    "x-fill", TRUE,
-                    "y-expand", FALSE,
-                    NULL);
-
+  entry = create_entry (CLUTTER_COLOR_Black, "<i>some</i> text", 0, 0);
+  clutter_actor_add_child (box, entry);
+  clutter_layout_manager_child_set (table, CLUTTER_CONTAINER (box), entry,
+                                    "row", 0,
+                                    "column", 1,
+                                    "x-expand", TRUE,
+                                    "x-fill", TRUE,
+                                    "y-expand", FALSE,
+                                    NULL);
   clutter_actor_grab_key_focus (entry);
+
+  label = create_label (CLUTTER_COLOR_White, "<b>A very long password field:</b>");
+  clutter_actor_add_child (box, label);
+  clutter_layout_manager_child_set (table, CLUTTER_CONTAINER (box), label,
+                                    "row", 1,
+                                    "column", 0,
+                                    "x-expand", FALSE,
+                                    "y-expand", FALSE,
+                                    NULL);
+
+  entry = create_entry (CLUTTER_COLOR_Black, "password", '*', 8);
+  clutter_actor_add_child (box, entry);
+  clutter_layout_manager_child_set (table, CLUTTER_CONTAINER (box), entry,
+                                    "row", 1,
+                                    "column", 1,
+                                    "x-expand", TRUE,
+                                    "x-fill", TRUE,
+                                    "y-expand", FALSE,
+                                    NULL);
+
   clutter_actor_show (stage);
 
   clutter_main ();

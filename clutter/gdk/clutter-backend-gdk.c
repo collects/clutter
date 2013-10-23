@@ -167,15 +167,6 @@ _clutter_backend_gdk_post_parse (ClutterBackend  *backend,
 
   g_assert (backend_gdk->display != NULL);
 
-#ifdef GDK_WINDOWING_X11
-  if (GDK_IS_X11_DISPLAY (backend_gdk->display))
-    {
-      /* Cogl needs to know the Xlib display connection for
-	 CoglTexturePixmapX11 */
-      cogl_xlib_set_display (gdk_x11_display_get_xdisplay (backend_gdk->display));
-    }
-#endif
-
   backend_gdk->screen = gdk_display_get_default_screen (backend_gdk->display);
 
   /* add event filter for Cogl events */
@@ -402,7 +393,7 @@ clutter_backend_gdk_init (ClutterBackendGdk *backend_gdk)
  *
  * Return value: (transfer none): the default display
  *
- * Since: 0.6
+ *
  */
 GdkDisplay *
 clutter_gdk_get_default_display (void)
@@ -437,7 +428,7 @@ clutter_gdk_get_default_display (void)
  * g_option_context_parse() yourself, you should also call
  * clutter_gdk_set_display() before g_option_context_parse().
  *
- * Since: 0.8
+ *
  */
 void
 clutter_gdk_set_display (GdkDisplay *display)
@@ -463,7 +454,7 @@ clutter_gdk_set_display (GdkDisplay *display)
  * This function should only be used when embedding Clutter into
  * a GDK based toolkit.
  *
- * Since: 1.10
+ *
  */
 void
 clutter_gdk_disable_event_retrieval (void)

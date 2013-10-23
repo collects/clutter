@@ -64,7 +64,7 @@ G_DEFINE_TYPE_WITH_CODE (ClutterStageGdk,
                          G_IMPLEMENT_INTERFACE (CLUTTER_TYPE_STAGE_WINDOW,
                                                 clutter_stage_window_iface_init));
 
-#ifdef CLUTTER_WINDOWING_X11
+#ifdef GDK_WINDOWING_X11
 static void
 clutter_stage_gdk_update_foreign_event_mask (CoglOnscreen *onscreen,
 					     guint32 event_mask,
@@ -182,7 +182,12 @@ clutter_stage_gdk_realize (ClutterStageWindow *stage_window)
   gboolean use_alpha;
   gfloat   width, height;
 
-  if (!stage_gdk->foreign_window)
+  if (stage_gdk->foreign_window)
+    {
+      width = gdk_window_get_width (stage_gdk->window);
+      height = gdk_window_get_height (stage_gdk->window);
+    }
+  else
     {
       if (stage_gdk->window != NULL)
         {
@@ -479,7 +484,7 @@ clutter_stage_window_iface_init (ClutterStageWindowIface *iface)
  *
  * Return value: (transfer none): A GdkWindow* for the stage window.
  *
- * Since: 1.10
+ *
  */
 GdkWindow *
 clutter_gdk_get_stage_window (ClutterStage *stage)
@@ -507,7 +512,7 @@ clutter_gdk_get_stage_window (ClutterStage *stage)
  * Return value: (transfer none): A #ClutterStage, or% NULL if a stage
  *   does not exist for the window
  *
- * Since: 1.10
+ *
  */
 ClutterStage *
 clutter_gdk_get_stage_from_window (GdkWindow *window)
@@ -552,7 +557,7 @@ set_foreign_window_callback (ClutterActor *actor,
  *
  * Return value: %TRUE if foreign window is valid
  *
- * Since: 1.10
+ *
  */
 gboolean
 clutter_gdk_set_stage_foreign (ClutterStage *stage,

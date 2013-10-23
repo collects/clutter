@@ -51,7 +51,7 @@ typedef struct _ClutterTextClass   ClutterTextClass;
  *
  * The #ClutterText struct contains only private data.
  *
- * Since: 1.0
+ *
  */
 struct _ClutterText
 {
@@ -65,11 +65,11 @@ struct _ClutterText
  * ClutterTextClass:
  * @text_changed: class handler for the #ClutterText::text-changed signal
  * @activate: class handler for the #ClutterText::activate signal
- * @cursor_event: class handler for the #ClutterText::cursor_event signal
+ * @cursor_changed: class handler for the #ClutterText::cursor-changed signal
  *
  * The #ClutterTextClass struct contains only private data.
  *
- * Since: 1.0
+ *
  */
 struct _ClutterTextClass
 {
@@ -78,10 +78,9 @@ struct _ClutterTextClass
 
   /*< public >*/
   /* signals, not vfuncs */
-  void (* text_changed) (ClutterText           *self);
-  void (* activate)     (ClutterText           *self);
-  void (* cursor_event) (ClutterText           *self,
-                         const ClutterGeometry *geometry);
+  void (* text_changed)   (ClutterText           *self);
+  void (* activate)       (ClutterText           *self);
+  void (* cursor_changed) (ClutterText           *self);
 
   /*< private >*/
   /* padding for future expansion */
@@ -92,7 +91,6 @@ struct _ClutterTextClass
   void (* _clutter_reserved5) (void);
   void (* _clutter_reserved6) (void);
   void (* _clutter_reserved7) (void);
-  void (* _clutter_reserved8) (void);
 };
 
 GType clutter_text_get_type (void) G_GNUC_CONST;
@@ -103,11 +101,11 @@ ClutterActor *        clutter_text_new_full             (const gchar          *f
                                                          const ClutterColor   *color);
 ClutterActor *        clutter_text_new_with_text        (const gchar          *font_name,
                                                          const gchar          *text);
-CLUTTER_AVAILABLE_IN_1_10
+
 ClutterActor *        clutter_text_new_with_buffer      (ClutterTextBuffer    *buffer);
-CLUTTER_AVAILABLE_IN_1_10
+
 ClutterTextBuffer *   clutter_text_get_buffer           (ClutterText          *self);
-CLUTTER_AVAILABLE_IN_1_10
+
 void                  clutter_text_set_buffer           (ClutterText          *self,
                                                          ClutterTextBuffer    *buffer);
 const gchar *         clutter_text_get_text             (ClutterText          *self);
@@ -182,6 +180,8 @@ void                  clutter_text_get_cursor_color     (ClutterText          *s
 void                  clutter_text_set_cursor_size      (ClutterText          *self,
                                                          gint                  size);
 guint                 clutter_text_get_cursor_size      (ClutterText          *self);
+void                  clutter_text_get_cursor_rect      (ClutterText          *self,
+                                                         ClutterRect          *rect);
 void                  clutter_text_set_selectable       (ClutterText          *self,
                                                          gboolean              selectable);
 gboolean              clutter_text_get_selectable       (ClutterText          *self);
@@ -213,7 +213,7 @@ void                  clutter_text_get_selected_text_color  (ClutterText        
                                                              ClutterColor         *color);
 
 gboolean              clutter_text_activate             (ClutterText          *self);
-CLUTTER_AVAILABLE_IN_1_10
+
 gint                  clutter_text_coords_to_position   (ClutterText          *self,
                                                          gfloat                x,
                                                          gfloat                y);

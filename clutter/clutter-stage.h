@@ -29,7 +29,7 @@
 #define __CLUTTER_STAGE_H__
 
 #include <clutter/clutter-types.h>
-#include <clutter/clutter-group.h>
+#include <clutter/clutter-actor.h>
 
 G_BEGIN_DECLS
 
@@ -50,12 +50,12 @@ typedef struct _ClutterStagePrivate ClutterStagePrivate;
  * The #ClutterStage structure contains only private data
  * and should be accessed using the provided API
  *
- * Since: 0.1
+ *
  */
 struct _ClutterStage
 {
   /*< private >*/
-  ClutterGroup parent_instance;
+  ClutterActor parent_instance;
 
   ClutterStagePrivate *priv;
 };
@@ -69,13 +69,13 @@ struct _ClutterStage
  *
  * The #ClutterStageClass structure contains only private data
  *
- * Since: 0.1
+ *
  */
 
 struct _ClutterStageClass
 {
   /*< private >*/
-  ClutterGroupClass parent_class;
+  ClutterActorClass parent_class;
 
   /*< public >*/
   /* signals */
@@ -89,7 +89,7 @@ struct _ClutterStageClass
 
   /*< private >*/
   /* padding for future expansion */
-  gpointer _padding_dummy[31];
+  gpointer _padding_dummy[16];
 };
 
 /**
@@ -105,7 +105,7 @@ struct _ClutterStageClass
  * Stage perspective definition. #ClutterPerspective is only used by
  * the fixed point version of clutter_stage_set_perspective().
  *
- * Since: 0.4
+ *
  */
 struct _ClutterPerspective
 {
@@ -115,28 +115,7 @@ struct _ClutterPerspective
   gfloat z_far;
 };
 
-/**
- * ClutterFog:
- * @z_near: starting distance from the viewer to the near clipping
- *   plane (always positive)
- * @z_far: final distance from the viewer to the far clipping
- *   plane (always positive)
- *
- * Fog settings used to create the depth cueing effect.
- *
- * Since: 0.6
- *
- * Deprecated: 1.10: The fog-related API in #ClutterStage has been
- *   deprecated as well.
- */
-struct _ClutterFog
-{
-  gfloat z_near;
-  gfloat z_far;
-};
-
 GType clutter_perspective_get_type (void) G_GNUC_CONST;
-GType clutter_fog_get_type (void) G_GNUC_CONST;
 GType clutter_stage_get_type (void) G_GNUC_CONST;
 
 ClutterActor *  clutter_stage_new                               (void);
@@ -201,6 +180,14 @@ void            clutter_stage_get_redraw_clip_bounds            (ClutterStage   
 void            clutter_stage_ensure_current                    (ClutterStage          *stage);
 void            clutter_stage_ensure_viewport                   (ClutterStage          *stage);
 void            clutter_stage_ensure_redraw                     (ClutterStage          *stage);
+
+#ifdef CLUTTER_ENABLE_EXPERIMENTAL_API
+CLUTTER_AVAILABLE_IN_1_14
+void            clutter_stage_set_sync_delay                    (ClutterStage          *stage,
+                                                                 gint                   sync_delay);
+CLUTTER_AVAILABLE_IN_1_14
+void            clutter_stage_skip_sync_delay                   (ClutterStage          *stage);
+#endif
 
 G_END_DECLS
 

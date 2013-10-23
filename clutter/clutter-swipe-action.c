@@ -34,7 +34,7 @@
  * #ClutterSwipeAction is a sub-class of #ClutterGestureAction that implements
  * the logic for recognizing swipe gestures.
  *
- * Since: 1.8
+ *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -59,6 +59,7 @@ struct _ClutterSwipeActionPrivate
 enum
 {
   SWEPT,
+  SWIPE,
 
   LAST_SIGNAL
 };
@@ -141,6 +142,7 @@ gesture_end (ClutterGestureAction *action,
   gfloat press_x, press_y;
   gfloat release_x, release_y;
   ClutterSwipeDirection direction = 0;
+  gboolean unused;
 
   clutter_gesture_action_get_press_coords (action,
                                            0,
@@ -160,7 +162,8 @@ gesture_end (ClutterGestureAction *action,
   else if (press_y - release_y > priv->threshold)
     direction |= CLUTTER_SWIPE_DIRECTION_UP;
 
-  g_signal_emit (action, swipe_signals[SWEPT], 0, actor, direction);
+  g_signal_emit (action, swipe_signals[SWIPE], 0, actor, direction,
+                 &unused);
 }
 
 static void
@@ -176,24 +179,25 @@ clutter_swipe_action_class_init (ClutterSwipeActionClass *klass)
   gesture_class->gesture_end = gesture_end;
 
   /**
-   * ClutterSwipeAction::swept:
+   * ClutterSwipeAction::swipe:
    * @action: the #ClutterSwipeAction that emitted the signal
    * @actor: the #ClutterActor attached to the @action
    * @direction: the main direction of the swipe gesture
    *
-   * The ::swept signal is emitted when a swipe gesture is recognized on the
+   * The ::swipe signal is emitted when a swipe gesture is recognized on the
    * attached actor.
    *
-   * Since: 1.8
+   * Return value: %TRUE if the swipe should continue, and %FALSE if
+   *   the swipe should be cancelled.
    */
-  swipe_signals[SWEPT] =
-    g_signal_new (I_("swept"),
+  swipe_signals[SWIPE] =
+    g_signal_new (I_("swipe"),
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (ClutterSwipeActionClass, swept),
-                  NULL, NULL,
-                  _clutter_marshal_VOID__OBJECT_FLAGS,
-                  G_TYPE_NONE, 2,
+                  G_STRUCT_OFFSET (ClutterSwipeActionClass, swipe),
+                  _clutter_boolean_continue_accumulator, NULL,
+                  _clutter_marshal_BOOLEAN__OBJECT_FLAGS,
+                  G_TYPE_BOOLEAN, 2,
                   CLUTTER_TYPE_ACTOR,
                   CLUTTER_TYPE_SWIPE_DIRECTION);
 }
@@ -212,7 +216,7 @@ clutter_swipe_action_init (ClutterSwipeAction *self)
  *
  * Return value: the newly created #ClutterSwipeAction
  *
- * Since: 1.8
+ *
  */
 ClutterAction *
 clutter_swipe_action_new (void)

@@ -180,6 +180,7 @@ clutter_deform_effect_paint_target (ClutterOffscreenEffect *effect)
 
   if (priv->is_dirty)
     {
+      ClutterRect rect;
       gboolean mapped_buffer;
       CoglVertexP3T2C4 *verts;
       ClutterActor *actor;
@@ -193,7 +194,12 @@ clutter_deform_effect_paint_target (ClutterOffscreenEffect *effect)
       /* if we don't have a target size, fall back to the actor's
        * allocation, though wrong it might be
        */
-      if (!clutter_offscreen_effect_get_target_size (effect, &width, &height))
+      if (clutter_offscreen_effect_get_target_rect (effect, &rect))
+        {
+          width = clutter_rect_get_width (&rect);
+          height = clutter_rect_get_height (&rect);
+        }
+      else
         clutter_actor_get_size (actor, &width, &height);
 
       /* XXX ideally, the sub-classes should tell us what they
@@ -581,7 +587,7 @@ clutter_deform_effect_class_init (ClutterDeformEffectClass *klass)
    * The number of horizontal tiles. The bigger the number, the
    * smaller the tiles
    *
-   * Since: 1.4
+   *
    */
   obj_props[PROP_X_TILES] =
     g_param_spec_uint ("x-tiles",
@@ -597,7 +603,7 @@ clutter_deform_effect_class_init (ClutterDeformEffectClass *klass)
    * The number of vertical tiles. The bigger the number, the
    * smaller the tiles
    *
-   * Since: 1.4
+   *
    */
   obj_props[PROP_Y_TILES] =
     g_param_spec_uint ("y-tiles",
@@ -615,7 +621,7 @@ clutter_deform_effect_class_init (ClutterDeformEffectClass *klass)
    *
    * By default, no material will be used
    *
-   * Since: 1.4
+   *
    */
   obj_props[PROP_BACK_MATERIAL] =
     g_param_spec_boxed ("back-material",
@@ -659,7 +665,7 @@ clutter_deform_effect_init (ClutterDeformEffect *self)
  * The #ClutterDeformEffect will take a reference on the material's
  * handle
  *
- * Since: 1.4
+ *
  */
 void
 clutter_deform_effect_set_back_material (ClutterDeformEffect *effect,
@@ -692,7 +698,7 @@ clutter_deform_effect_set_back_material (ClutterDeformEffect *effect,
  *   The returned material is owned by the #ClutterDeformEffect and it
  *   should not be freed directly
  *
- * Since: 1.4
+ *
  */
 CoglHandle
 clutter_deform_effect_get_back_material (ClutterDeformEffect *effect)
@@ -714,7 +720,7 @@ clutter_deform_effect_get_back_material (ClutterDeformEffect *effect)
  * More tiles allow a finer grained deformation at the expenses
  * of computation
  *
- * Since: 1.4
+ *
  */
 void
 clutter_deform_effect_set_n_tiles (ClutterDeformEffect *effect,
@@ -769,7 +775,7 @@ clutter_deform_effect_set_n_tiles (ClutterDeformEffect *effect,
  * Retrieves the number of horizontal and vertical tiles used to sub-divide
  * the actor's geometry during the effect
  *
- * Since: 1.4
+ *
  */
 void
 clutter_deform_effect_get_n_tiles (ClutterDeformEffect *effect,
@@ -792,7 +798,7 @@ clutter_deform_effect_get_n_tiles (ClutterDeformEffect *effect,
  * Invalidates the @effect<!-- -->'s vertices and, if it is associated
  * to an actor, it will queue a redraw
  *
- * Since: 1.4
+ *
  */
 void
 clutter_deform_effect_invalidate (ClutterDeformEffect *effect)

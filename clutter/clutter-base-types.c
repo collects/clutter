@@ -44,110 +44,6 @@
 
 
 /*
- * ClutterGeometry
- */
-
-static ClutterGeometry*
-clutter_geometry_copy (const ClutterGeometry *geometry)
-{
-  return g_slice_dup (ClutterGeometry, geometry);
-}
-
-static void
-clutter_geometry_free (ClutterGeometry *geometry)
-{
-  if (G_LIKELY (geometry != NULL))
-    g_slice_free (ClutterGeometry, geometry);
-}
-
-/**
- * clutter_geometry_union:
- * @geometry_a: a #ClutterGeometry
- * @geometry_b: another #ClutterGeometry
- * @result: (out): location to store the result
- *
- * Find the union of two rectangles represented as #ClutterGeometry.
- *
- * Since: 1.4
- */
-void
-clutter_geometry_union (const ClutterGeometry *geometry_a,
-                        const ClutterGeometry *geometry_b,
-                        ClutterGeometry       *result)
-{
-  /* We don't try to handle rectangles that can't be represented
-   * as a signed integer box */
-  gint x_1 = MIN (geometry_a->x, geometry_b->x);
-  gint y_1 = MIN (geometry_a->y, geometry_b->y);
-  gint x_2 = MAX (geometry_a->x + (gint)geometry_a->width,
-                  geometry_b->x + (gint)geometry_b->width);
-  gint y_2 = MAX (geometry_a->y + (gint)geometry_a->height,
-                  geometry_b->y + (gint)geometry_b->height);
-  result->x = x_1;
-  result->y = y_1;
-  result->width = x_2 - x_1;
-  result->height = y_2 - y_1;
-}
-
-/**
- * clutter_geometry_intersects:
- * @geometry0: The first geometry to test
- * @geometry1: The second geometry to test
- *
- * Determines if @geometry0 and geometry1 intersect returning %TRUE if
- * they do else %FALSE.
- *
- * Return value: %TRUE of @geometry0 and geometry1 intersect else
- * %FALSE.
- *
- * Since: 1.4
- */
-gboolean
-clutter_geometry_intersects (const ClutterGeometry *geometry0,
-                             const ClutterGeometry *geometry1)
-{
-  if (geometry1->x >= (geometry0->x + (gint)geometry0->width) ||
-      geometry1->y >= (geometry0->y + (gint)geometry0->height) ||
-      (geometry1->x + (gint)geometry1->width) <= geometry0->x ||
-      (geometry1->y + (gint)geometry1->height) <= geometry0->y)
-    return FALSE;
-  else
-    return TRUE;
-}
-
-static gboolean
-clutter_geometry_progress (const GValue *a,
-                           const GValue *b,
-                           gdouble       progress,
-                           GValue       *retval)
-{
-  const ClutterGeometry *a_geom = g_value_get_boxed (a);
-  const ClutterGeometry *b_geom = g_value_get_boxed (b);
-  ClutterGeometry res = { 0, };
-  gint a_width = a_geom->width;
-  gint b_width = b_geom->width;
-  gint a_height = a_geom->height;
-  gint b_height = b_geom->height;
-
-  res.x = a_geom->x + (b_geom->x - a_geom->x) * progress;
-  res.y = a_geom->y + (b_geom->y - a_geom->y) * progress;
-
-  res.width = a_width + (b_width - a_width) * progress;
-  res.height = a_height + (b_height - a_height) * progress;
-
-  g_value_set_boxed (retval, &res);
-
-  return TRUE;
-}
-
-G_DEFINE_BOXED_TYPE_WITH_CODE (ClutterGeometry, clutter_geometry,
-                               clutter_geometry_copy,
-                               clutter_geometry_free,
-                               CLUTTER_REGISTER_INTERVAL_PROGRESS (clutter_geometry_progress));
-
-
-
-/*
  * ClutterVertices
  */
 
@@ -169,7 +65,7 @@ G_DEFINE_BOXED_TYPE_WITH_CODE (ClutterGeometry, clutter_geometry,
  * Return value: (transfer full): the newly allocated #ClutterVertex.
  *   Use clutter_vertex_free() to free the resources
  *
- * Since: 1.0
+ *
  */
 ClutterVertex *
 clutter_vertex_new (gfloat x,
@@ -187,7 +83,7 @@ clutter_vertex_new (gfloat x,
  * Return value: (transfer full): the newly allocated #ClutterVertex.
  *   Use clutter_vertex_free() to free its resources
  *
- * Since: 1.12
+ *
  */
 ClutterVertex *
 clutter_vertex_alloc (void)
@@ -206,7 +102,7 @@ clutter_vertex_alloc (void)
  *
  * Return value: (transfer none): the initialized #ClutterVertex
  *
- * Since: 1.10
+ *
  */
 ClutterVertex *
 clutter_vertex_init (ClutterVertex *vertex,
@@ -232,7 +128,7 @@ clutter_vertex_init (ClutterVertex *vertex,
  * Return value: (transfer full): a newly allocated copy of #ClutterVertex.
  *   Use clutter_vertex_free() to free the allocated resources
  *
- * Since: 1.0
+ *
  */
 ClutterVertex *
 clutter_vertex_copy (const ClutterVertex *vertex)
@@ -250,7 +146,7 @@ clutter_vertex_copy (const ClutterVertex *vertex)
  * Frees a #ClutterVertex allocated using clutter_vertex_alloc() or
  * clutter_vertex_copy().
  *
- * Since: 1.0
+ *
  */
 void
 clutter_vertex_free (ClutterVertex *vertex)
@@ -268,7 +164,7 @@ clutter_vertex_free (ClutterVertex *vertex)
  *
  * Return value: %TRUE if the passed #ClutterVertex are equal
  *
- * Since: 1.0
+ *
  */
 gboolean
 clutter_vertex_equal (const ClutterVertex *vertex_a,
@@ -332,7 +228,7 @@ G_DEFINE_BOXED_TYPE_WITH_CODE (ClutterVertex, clutter_vertex,
  *   clutter_margin_free() to free the resources associated with it when
  *   done.
  *
- * Since: 1.10
+ *
  */
 ClutterMargin *
 clutter_margin_new (void)
@@ -349,7 +245,7 @@ clutter_margin_new (void)
  *
  * Return value: (transfer full): a copy of the #ClutterMargin.
  *
- * Since: 1.10
+ *
  */
 ClutterMargin *
 clutter_margin_copy (const ClutterMargin *margin_)
@@ -367,7 +263,7 @@ clutter_margin_copy (const ClutterMargin *margin_)
  * Frees the resources allocated by clutter_margin_new() and
  * clutter_margin_copy().
  *
- * Since: 1.10
+ *
  */
 void
 clutter_margin_free (ClutterMargin *margin_)
@@ -398,7 +294,7 @@ static const ClutterPoint _clutter_point_zero = CLUTTER_POINT_INIT_ZERO;
  * Return value: a point centered in (0, 0); the returned #ClutterPoint
  *   is owned by Clutter and it should not be modified or freed.
  *
- * Since: 1.12
+ *
  */
 const ClutterPoint *
 clutter_point_zero (void)
@@ -414,7 +310,7 @@ clutter_point_zero (void)
  * Return value: (transfer full): the newly allocated #ClutterPoint.
  *   Use clutter_point_free() to free its resources.
  *
- * Since: 1.12
+ *
  */
 ClutterPoint *
 clutter_point_alloc (void)
@@ -432,7 +328,7 @@ clutter_point_alloc (void)
  *
  * Return value: (transfer none): the initialized #ClutterPoint
  *
- * Since: 1.12
+ *
  */
 ClutterPoint *
 clutter_point_init (ClutterPoint *point,
@@ -456,7 +352,7 @@ clutter_point_init (ClutterPoint *point,
  * Return value: (transfer full): a newly allocated #ClutterPoint.
  *   Use clutter_point_free() to free its resources.
  *
- * Since: 1.12
+ *
  */
 ClutterPoint *
 clutter_point_copy (const ClutterPoint *point)
@@ -470,7 +366,7 @@ clutter_point_copy (const ClutterPoint *point)
  *
  * Frees the resources allocated for @point.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_point_free (ClutterPoint *point)
@@ -488,7 +384,7 @@ clutter_point_free (ClutterPoint *point)
  *
  * Return value: %TRUE if the #ClutterPoints are equal
  *
- * Since: 1.12
+ *
  */
 gboolean
 clutter_point_equals (const ClutterPoint *a,
@@ -517,7 +413,7 @@ clutter_point_equals (const ClutterPoint *a,
  *
  * Return value: the distance between the points.
  *
- * Since: 1.12
+ *
  */
 float
 clutter_point_distance (const ClutterPoint *a,
@@ -582,7 +478,7 @@ G_DEFINE_BOXED_TYPE_WITH_CODE (ClutterPoint, clutter_point,
  * Return value: (transfer full): the newly allocated #ClutterSize.
  *   Use clutter_size_free() to free its resources.
  *
- * Since: 1.12
+ *
  */
 ClutterSize *
 clutter_size_alloc (void)
@@ -600,7 +496,7 @@ clutter_size_alloc (void)
  *
  * Return value: (transfer none): the initialized #ClutterSize
  *
- * Since: 1.12
+ *
  */
 ClutterSize *
 clutter_size_init (ClutterSize *size,
@@ -624,7 +520,7 @@ clutter_size_init (ClutterSize *size,
  * Return value: (transfer full): the newly allocated #ClutterSize.
  *   Use clutter_size_free() to free its resources.
  *
- * Since: 1.12
+ *
  */
 ClutterSize *
 clutter_size_copy (const ClutterSize *size)
@@ -638,7 +534,7 @@ clutter_size_copy (const ClutterSize *size)
  *
  * Frees the resources allocated for @size.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_size_free (ClutterSize *size)
@@ -656,7 +552,7 @@ clutter_size_free (ClutterSize *size)
  *
  * Return value: %TRUE if the two #ClutterSize are equal
  *
- * Since: 1.12
+ *
  */
 gboolean
 clutter_size_equals (const ClutterSize *a,
@@ -748,7 +644,7 @@ clutter_rect_normalize_internal (ClutterRect *rect)
  *   The returned #ClutterRect is owned by Clutter and it should not
  *   be modified or freed.
  *
- * Since: 1.12
+ *
  */
 const ClutterRect *
 clutter_rect_zero (void)
@@ -771,7 +667,7 @@ clutter_rect_zero (void)
  * Return value: (transfer full): the newly allocated #ClutterRect.
  *   Use clutter_rect_free() to free its resources
  *
- * Since: 1.12
+ *
  */
 ClutterRect *
 clutter_rect_alloc (void)
@@ -791,7 +687,7 @@ clutter_rect_alloc (void)
  *
  * Return value: (transfer none): the updated rectangle
  *
- * Since: 1.12
+ *
  */
 ClutterRect *
 clutter_rect_init (ClutterRect *rect,
@@ -820,7 +716,7 @@ clutter_rect_init (ClutterRect *rect,
  * Return value: (transfer full): the newly allocate copy of @rect.
  *   Use clutter_rect_free() to free the associated resources
  *
- * Since: 1.12
+ *
  */
 ClutterRect *
 clutter_rect_copy (const ClutterRect *rect)
@@ -844,7 +740,7 @@ clutter_rect_copy (const ClutterRect *rect)
  *
  * Frees the resources allocated by @rect.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_rect_free (ClutterRect *rect)
@@ -865,7 +761,7 @@ clutter_rect_free (ClutterRect *rect)
  *
  * Return value: %TRUE if the rectangles match in origin and size.
  *
- * Since: 1.12
+ *
  */
 gboolean
 clutter_rect_equals (ClutterRect *a,
@@ -898,7 +794,7 @@ clutter_rect_equals (ClutterRect *a,
  * This function is useful to ensure that a rectangle has positive width
  * and height; it will modify the passed @rect and normalize its size.
  *
- * Since: 1.12
+ *
  */
 ClutterRect *
 clutter_rect_normalize (ClutterRect *rect)
@@ -918,7 +814,7 @@ clutter_rect_normalize (ClutterRect *rect)
  * Retrieves the center of @rect, after normalizing the rectangle,
  * and updates @center with the correct coordinates.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_rect_get_center (ClutterRect  *rect,
@@ -943,7 +839,7 @@ clutter_rect_get_center (ClutterRect  *rect,
  *
  * Return value: %TRUE if the @point is contained by @rect.
  *
- * Since: 1.12
+ *
  */
 gboolean
 clutter_rect_contains_point (ClutterRect  *rect,
@@ -972,7 +868,7 @@ clutter_rect_contains_point (ClutterRect  *rect,
  *
  * Return value: %TRUE if the first rectangle contains the second.
  *
- * Since: 1.12
+ *
  */
 gboolean
 clutter_rect_contains_rect (ClutterRect *a,
@@ -1000,7 +896,7 @@ clutter_rect_contains_rect (ClutterRect *a,
  * This function will normalize both @a and @b prior to computing their
  * union.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_rect_union (ClutterRect *a,
@@ -1038,7 +934,7 @@ clutter_rect_union (ClutterRect *a,
  *
  * Return value: %TRUE if the intersection of @a and @b is not empty
  *
- * Since: 1.12
+ *
  */
 gboolean
 clutter_rect_intersection (ClutterRect *a,
@@ -1053,7 +949,7 @@ clutter_rect_intersection (ClutterRect *a,
   clutter_rect_normalize_internal (a);
   clutter_rect_normalize_internal (b);
 
-  x_1 = MAX (a->origin.x, b->origin.y);
+  x_1 = MAX (a->origin.x, b->origin.x);
   y_1 = MAX (a->origin.y, b->origin.y);
   x_2 = MIN (a->origin.x + a->size.width, b->origin.x + b->size.width);
   y_2 = MIN (a->origin.y + a->size.height, b->origin.y + b->size.height);
@@ -1081,7 +977,7 @@ clutter_rect_intersection (ClutterRect *a,
  * Offsets the origin of @rect by the given values, after normalizing
  * the rectangle.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_rect_offset (ClutterRect *rect,
@@ -1113,7 +1009,7 @@ clutter_rect_offset (ClutterRect *rect,
  * If the resulting rectangle has a negative width or height, the size is
  * set to 0.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_rect_inset (ClutterRect *rect,
@@ -1153,7 +1049,7 @@ clutter_rect_inset (ClutterRect *rect,
  * updated to the smallest rectangle capable of fully containing the
  * original, fractional rectangle.
  *
- * Since: 1.12
+ *
  */
 void
 clutter_rect_clamp_to_pixel (ClutterRect *rect)
@@ -1177,7 +1073,7 @@ clutter_rect_clamp_to_pixel (ClutterRect *rect)
  *
  * Return value: the X coordinate of the origin of the rectangle
  *
- * Since: 1.12
+ *
  */
 float
 clutter_rect_get_x (ClutterRect *rect)
@@ -1197,7 +1093,7 @@ clutter_rect_get_x (ClutterRect *rect)
  *
  * Return value: the Y coordinate of the origin of the rectangle
  *
- * Since: 1.12
+ *
  */
 float
 clutter_rect_get_y (ClutterRect *rect)
@@ -1217,7 +1113,7 @@ clutter_rect_get_y (ClutterRect *rect)
  *
  * Return value: the width of the rectangle
  *
- * Since: 1.12
+ *
  */
 float
 clutter_rect_get_width (ClutterRect *rect)
@@ -1237,7 +1133,7 @@ clutter_rect_get_width (ClutterRect *rect)
  *
  * Return value: the height of the rectangle
  *
- * Since: 1.12
+ *
  */
 float
 clutter_rect_get_height (ClutterRect *rect)
@@ -1259,7 +1155,7 @@ clutter_rect_progress (const GValue *a,
   const ClutterRect *rect_b = g_value_get_boxed (b);
   ClutterRect res = CLUTTER_RECT_INIT_ZERO;
 
-#define INTERPOLATE(r_a,r_b,member,field,factor)     ((r_a)->member.field + (((r_b)->member.field - ((r_b)->member.field)) * (factor)))
+#define INTERPOLATE(r_a,r_b,member,field,factor)     ((r_a)->member.field + (((r_b)->member.field - ((r_a)->member.field)) * (factor)))
 
   res.origin.x = INTERPOLATE (rect_a, rect_b, origin, x, progress);
   res.origin.y = INTERPOLATE (rect_a, rect_b, origin, y, progress);
@@ -1268,8 +1164,6 @@ clutter_rect_progress (const GValue *a,
   res.size.height = INTERPOLATE (rect_a, rect_b, size, height, progress);
 
 #undef INTERPOLATE
-
-  clutter_rect_normalize_internal (&res);
 
   g_value_set_boxed (retval, &res);
 
@@ -1283,7 +1177,7 @@ clutter_rect_progress (const GValue *a,
  *
  * It is identicaly to #CoglMatrix.
  *
- * Since: 1.12
+ *
  */
 
 static gpointer
@@ -1377,7 +1271,7 @@ G_DEFINE_BOXED_TYPE_WITH_CODE (ClutterMatrix, clutter_matrix,
  *
  * Return value: (transfer full): the newly allocated #ClutterMatrix
  *
- * Since: 1.12
+ *
  */
 ClutterMatrix *
 clutter_matrix_alloc (void)
@@ -1391,7 +1285,7 @@ clutter_matrix_alloc (void)
  *
  * Frees the memory allocated by clutter_matrix_alloc().
  *
- * Since: 1.12
+ *
  */
 void
 clutter_matrix_free (ClutterMatrix *matrix)
@@ -1414,7 +1308,7 @@ clutter_matrix_free (ClutterMatrix *matrix)
  *
  * Return value: (transfer none): the initialized #ClutterMatrix
  *
- * Since: 1.12
+ *
  */
 ClutterMatrix *
 clutter_matrix_init_identity (ClutterMatrix *matrix)
@@ -1435,7 +1329,7 @@ clutter_matrix_init_identity (ClutterMatrix *matrix)
  *
  * Return value: (transfer none): the initialzed #ClutterMatrix
  *
- * Since: 1.12
+ *
  */
 ClutterMatrix *
 clutter_matrix_init_from_array (ClutterMatrix *matrix,
@@ -1456,7 +1350,7 @@ clutter_matrix_init_from_array (ClutterMatrix *matrix,
  *
  * Return value: (transfer none): the initialized #ClutterMatrix
  *
- * Since: 1.12
+ *
  */
 ClutterMatrix *
 clutter_matrix_init_from_matrix (ClutterMatrix       *a,

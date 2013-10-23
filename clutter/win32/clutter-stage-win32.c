@@ -267,12 +267,13 @@ clutter_stage_win32_set_cursor_visible (ClutterStageWindow *stage_window,
 }
 
 static LONG
-get_window_style (ClutterStageWin32 *stage_win32)
+get_requested_window_style (ClutterStageWin32 *stage_win32,
+			    gboolean           want_fullscreen)
 {
   ClutterStage *wrapper = stage_win32->wrapper;
 
   /* Fullscreen mode shouldn't have any borders */
-  if (_clutter_stage_is_fullscreen (wrapper))
+  if (want_fullscreen)
     return WS_POPUP;
   /* Otherwise it's an overlapped window but if it isn't resizable
      then it shouldn't have a thick frame */
@@ -280,6 +281,15 @@ get_window_style (ClutterStageWin32 *stage_win32)
     return WS_OVERLAPPEDWINDOW;
   else
     return WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX;
+}
+
+static LONG
+get_window_style (ClutterStageWin32 *stage_win32)
+{
+  ClutterStage *wrapper = stage_win32->wrapper;
+
+  return get_requested_window_style (stage_win32, 
+   _clutter_stage_is_fullscreen (wrapper));
 }
 
 static void
@@ -327,7 +337,7 @@ clutter_stage_win32_set_fullscreen (ClutterStageWindow *stage_window,
     {
       /* Update the window style but preserve the visibility */
       SetWindowLongW (hwnd, GWL_STYLE,
-		      get_window_style (stage_win32)
+		      get_requested_window_style (stage_win32, value)
 		      | (old_style & WS_VISIBLE));
       /* Update the window size */
       if (value)
@@ -651,7 +661,7 @@ clutter_stage_window_iface_init (ClutterStageWindowIface *iface)
  *
  * Return value: An HWND for the stage window.
  *
- * Since: 0.8
+ *
  */
 HWND
 clutter_win32_get_stage_window (ClutterStage *stage)
@@ -676,7 +686,7 @@ clutter_win32_get_stage_window (ClutterStage *stage)
  * Return value: The stage or NULL if a stage does not exist for the
  * window.
  *
- * Since: 0.8
+ *
  */
 ClutterStage *
 clutter_win32_get_stage_from_window (HWND hwnd)
@@ -761,7 +771,7 @@ set_foreign_window_callback (ClutterActor *actor,
  *
  * Return value: %TRUE if foreign window is valid
  *
- * Since: 0.8
+ *
  */
 gboolean
 clutter_win32_set_stage_foreign (ClutterStage *stage,

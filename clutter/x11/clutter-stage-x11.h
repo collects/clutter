@@ -22,10 +22,7 @@
 #ifndef __CLUTTER_STAGE_X11_H__
 #define __CLUTTER_STAGE_X11_H__
 
-#include <clutter/clutter-group.h>
 #include <clutter/clutter-stage.h>
-#include <X11/Xlib.h>
-#include <X11/Xatom.h>
 
 #include "clutter-backend-x11.h"
 #include "cogl/clutter-stage-cogl.h"
@@ -67,6 +64,7 @@ struct _ClutterStageX11
   guint viewport_initialized  : 1;
   guint accept_focus          : 1;
   guint fullscreen_on_realize : 1;
+  guint cursor_hidden_xfixes  : 1;
 };
 
 struct _ClutterStageX11Class

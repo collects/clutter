@@ -52,7 +52,7 @@ typedef struct _ClutterOffscreenEffectClass     ClutterOffscreenEffectClass;
  * The #ClutterOffscreenEffect structure contains only private data
  * and should be accessed using the provided API
  *
- * Since: 1.4
+ *
  */
 struct _ClutterOffscreenEffect
 {
@@ -69,7 +69,7 @@ struct _ClutterOffscreenEffect
  *
  * The #ClutterOffscreenEffectClass structure contains only private data
  *
- * Since: 1.4
+ *
  */
 struct _ClutterOffscreenEffectClass
 {
@@ -96,16 +96,22 @@ GType clutter_offscreen_effect_get_type (void) G_GNUC_CONST;
 
 CoglMaterial *  clutter_offscreen_effect_get_target             (ClutterOffscreenEffect *effect);
 
-CLUTTER_AVAILABLE_IN_1_10
+
 CoglHandle      clutter_offscreen_effect_get_texture            (ClutterOffscreenEffect *effect);
 
 void            clutter_offscreen_effect_paint_target           (ClutterOffscreenEffect *effect);
 CoglHandle      clutter_offscreen_effect_create_texture         (ClutterOffscreenEffect *effect,
                                                                  gfloat                  width,
                                                                  gfloat                  height);
+
+CLUTTER_DEPRECATED_IN_1_14_FOR (clutter_offscreen_effect_get_target_rect)
 gboolean        clutter_offscreen_effect_get_target_size        (ClutterOffscreenEffect *effect,
                                                                  gfloat                 *width,
                                                                  gfloat                 *height);
+
+CLUTTER_AVAILABLE_IN_1_14
+gboolean        clutter_offscreen_effect_get_target_rect        (ClutterOffscreenEffect *effect,
+                                                                 ClutterRect            *rect);
 
 G_END_DECLS
 

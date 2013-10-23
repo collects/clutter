@@ -33,6 +33,7 @@
 #include "clutter-wayland.h"
 #include "clutter-stage-wayland.h"
 #include "clutter-backend-wayland.h"
+#include "clutter-backend-wayland-priv.h"
 #include "clutter-stage-window.h"
 #include "clutter-stage-private.h"
 #include "clutter-event-private.h"
@@ -112,20 +113,44 @@ clutter_stage_wayland_realize (ClutterStageWindow *stage_window)
 
   wl_surface = cogl_wayland_onscreen_get_surface (stage_cogl->onscreen);
   wl_surface_set_user_data (wl_surface, stage_wayland);
-
-  wl_shell_surface =
-    cogl_wayland_onscreen_get_shell_surface (stage_cogl->onscreen);
-  wl_shell_surface_add_listener (wl_shell_surface,
-                                 &shell_surface_listener,
-                                 stage_wayland);
-
   stage_wayland->wayland_surface = wl_surface;
-  stage_wayland->wayland_shell_surface = wl_shell_surface;
+
+  if (!stage_wayland->foreign_wl_surface)
+    {
+      wl_shell_surface =
+        cogl_wayland_onscreen_get_shell_surface (stage_cogl->onscreen);
+      wl_shell_surface_add_listener (wl_shell_surface,
+                                     &shell_surface_listener,
+                                     stage_wayland);
+      stage_wayland->wayland_shell_surface = wl_shell_surface;
+    }
 
   if (stage_wayland->fullscreen)
     clutter_stage_wayland_set_fullscreen (stage_window, TRUE);
 
   return TRUE;
+}
+
+static void
+clutter_stage_wayland_show (ClutterStageWindow *stage_window,
+                            gboolean            do_raise)
+{
+  ClutterStageCogl *stage_cogl = CLUTTER_STAGE_COGL (stage_window);
+  ClutterStageWayland *stage_wayland = CLUTTER_STAGE_WAYLAND (stage_window);
+
+  clutter_stage_window_parent_iface->show (stage_window, do_raise);
+
+  if (stage_wayland->wayland_shell_surface)
+    wl_shell_surface_set_toplevel (stage_wayland->wayland_shell_surface);
+
+  stage_wayland->shown = TRUE;
+
+  /* We need to queue a redraw after the stage is shown because all of
+   * the other queue redraws up to this point will have been ignored
+   * because the actor was not visible. The other backends do not need
+   * to do this because they will get expose events at some point, but
+   * that does not happen for Wayland. */
+  clutter_actor_queue_redraw (CLUTTER_ACTOR (stage_cogl->wrapper));
 }
 
 static void
@@ -140,7 +165,7 @@ clutter_stage_wayland_set_fullscreen (ClutterStageWindow *stage_window,
 
   stage_wayland->fullscreen = fullscreen;
 
-  if (!stage_wayland->wayland_shell_surface) /* Not realized yet */
+  if (!stage_wayland->wayland_shell_surface)
     return;
 
   if (fullscreen)
@@ -182,12 +207,16 @@ clutter_stage_wayland_resize (ClutterStageWindow *stage_window,
                               gint                height)
 {
   ClutterStageCogl *stage_cogl = CLUTTER_STAGE_COGL (stage_window);
+  ClutterStageWayland *stage_wayland = CLUTTER_STAGE_WAYLAND (stage_window);
 
   /* Resize preserving top left */
   if (stage_cogl->onscreen)
     {
       cogl_wayland_onscreen_resize (stage_cogl->onscreen, width, height, 0, 0);
-      _clutter_stage_window_redraw (stage_window);
+
+      /* Only trigger a redraw if the stage window has been shown */
+      if (stage_wayland->shown)
+        _clutter_stage_window_redraw (stage_window);
     }
 }
 
@@ -202,6 +231,7 @@ clutter_stage_window_iface_init (ClutterStageWindowIface *iface)
   clutter_stage_window_parent_iface = g_type_interface_peek_parent (iface);
 
   iface->realize = clutter_stage_wayland_realize;
+  iface->show = clutter_stage_wayland_show;
   iface->set_fullscreen = clutter_stage_wayland_set_fullscreen;
   iface->resize = clutter_stage_wayland_resize;
 }
@@ -213,7 +243,6 @@ clutter_stage_wayland_class_init (ClutterStageWaylandClass *klass)
 
 /**
  * clutter_wayland_stage_get_wl_shell_surface: (skip)
- *
  * @stage: a #ClutterStage
  *
  * Access the underlying data structure representing the shell surface that is
@@ -222,10 +251,10 @@ clutter_stage_wayland_class_init (ClutterStageWaylandClass *klass)
  * Note: this function can only be called when running on the Wayland
  * platform. Calling this function at any other time will return %NULL.
  *
- * Returns: (transfer non): the Wayland shell surface associated with
+ * Returns: (transfer none): the Wayland shell surface associated with
  * @stage
  *
- * Since: 1.10
+ *
  */
 struct wl_shell_surface *
 clutter_wayland_stage_get_wl_shell_surface (ClutterStage *stage)
@@ -243,7 +272,6 @@ clutter_wayland_stage_get_wl_shell_surface (ClutterStage *stage)
 
 /**
  * clutter_wayland_stage_get_wl_surface: (skip)
- *
  * @stage: a #ClutterStage
  *
  * Access the underlying data structure representing the surface that is
@@ -253,6 +281,8 @@ clutter_wayland_stage_get_wl_shell_surface (ClutterStage *stage)
  * platform. Calling this function at any other time will return %NULL.
  *
  * Returns: (transfer none): the Wayland surface associated with @stage
+ *
+ * Since: 1.10
  */
 struct wl_surface *
 clutter_wayland_stage_get_wl_surface (ClutterStage *stage)
@@ -267,4 +297,51 @@ clutter_wayland_stage_get_wl_surface (ClutterStage *stage)
 
   return stage_wayland->wayland_surface;
 
+}
+
+/**
+ * clutter_wayland_stage_set_wl_surface:
+ * @stage: a #ClutterStage
+ * @surface: A Wayland surface to associate with the @stage.
+ *
+ * Allows you to explicitly provide an existing Wayland surface to associate
+ * with @stage, preventing Cogl from allocating a surface and shell surface for
+ * the stage automatically.
+ *
+ * This function must be called before @stage is shown.
+ *
+ * Note: this function can only be called when running on the Wayland
+ * platform. Calling this function at any other time has no effect.
+ *
+ * Since: 1.16
+ */
+void
+clutter_wayland_stage_set_wl_surface (ClutterStage *stage,
+                                      struct wl_surface *surface)
+{
+  ClutterStageWindow *stage_window = _clutter_stage_get_window (stage);
+  ClutterStageWayland *stage_wayland;
+  ClutterStageCogl *stage_cogl;
+
+  if (!CLUTTER_IS_STAGE_WAYLAND (stage_window))
+    return;
+
+  stage_cogl = CLUTTER_STAGE_COGL (stage_window);
+
+  if (stage_cogl->onscreen == NULL)
+    {
+      ClutterBackend *backend = clutter_get_default_backend ();
+
+      /* Use the same default dimensions as clutter_stage_cogl_realize() */
+      stage_cogl->onscreen = cogl_onscreen_new (backend->cogl_context,
+                                                800, 600);
+
+      cogl_wayland_onscreen_set_foreign_surface (stage_cogl->onscreen,
+                                                 surface);
+
+      stage_wayland = CLUTTER_STAGE_WAYLAND (stage_window);
+      stage_wayland->foreign_wl_surface = TRUE;
+    }
+  else
+    g_warning (G_STRLOC ": cannot set foreign surface for stage");
 }

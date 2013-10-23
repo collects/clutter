@@ -37,9 +37,12 @@
 #include "clutter-private.h"
 #include "clutter-stage-private.h"
 
-#include "clutter-shader.h"
-
 #include "cogl/cogl.h"
+
+/* prototype decleration for DllMain to satisfy compiler checking in 
+ * maintainer mode build.
+ */
+BOOL WINAPI DllMain (HINSTANCE hinst, DWORD reason, LPVOID reserved);
 
 G_DEFINE_TYPE (ClutterBackendWin32, clutter_backend_win32,
 	       CLUTTER_TYPE_BACKEND);
@@ -160,7 +163,7 @@ clutter_backend_win32_get_features (ClutterBackend *backend)
  *
  * This function can only be called before calling clutter_init().
  *
- * Since: 0.8
+ *
  */
 void
 clutter_win32_disable_event_retrieval (void)

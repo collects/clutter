@@ -62,6 +62,7 @@
 #include <cogl/cogl-xlib.h>
 
 #include "clutter-backend.h"
+#include "clutter-color.h"
 #include "clutter-debug.h"
 #include "clutter-device-manager-private.h"
 #include "clutter-event-private.h"
@@ -94,7 +95,7 @@ static const gchar *atom_names[] = {
 
 /* various flags corresponding to pre init setup calls */
 static gboolean _no_xevent_retrieval = FALSE;
-static gboolean clutter_enable_xinput = FALSE;
+static gboolean clutter_enable_xinput = TRUE;
 static gboolean clutter_enable_argb = FALSE;
 static Display  *_foreign_dpy = NULL;
 
@@ -239,12 +240,7 @@ clutter_backend_x11_create_device_manager (ClutterBackendX11 *backend_x11)
             {
 #ifdef HAVE_XINPUT_2
               int major = 2;
-
-#ifdef HAVE_XINPUT_2_2
-              int minor = 2;
-#else
-              int minor = 0;
-#endif /* HAVE_XINPUT_2_2 */
+              int minor = 3;
 
               if (XIQueryVersion (backend_x11->xdpy, &major, &minor) != BadRequest)
                 {
@@ -336,10 +332,10 @@ clutter_backend_x11_pre_parse (ClutterBackend  *backend,
       env_string = NULL;
     }
 
-  env_string = g_getenv ("CLUTTER_ENABLE_XINPUT");
+  env_string = g_getenv ("CLUTTER_DISABLE_XINPUT");
   if (env_string)
     {
-      clutter_enable_xinput = TRUE;
+      clutter_enable_xinput = FALSE;
       env_string = NULL;
     }
 
@@ -394,10 +390,6 @@ clutter_backend_x11_post_parse (ClutterBackend  *backend,
   CLUTTER_NOTE (BACKEND, "Getting the X screen");
 
   settings = clutter_settings_get_default ();
-
-  /* Cogl needs to know the Xlib display connection for
-     CoglTexturePixmapX11 */
-  cogl_xlib_set_display (backend_x11->xdpy);
 
   /* add event filter for Cogl events */
   clutter_x11_add_filter (cogl_xlib_filter, NULL);
@@ -528,10 +520,10 @@ static const GOptionEntry entries[] =
   },
 #if defined(HAVE_XINPUT) || defined(HAVE_XINPUT_2)
   {
-    "enable-xinput", 0,
-    0,
+    "disable-xinput", 0,
+    G_OPTION_FLAG_REVERSE,
     G_OPTION_ARG_NONE, &clutter_enable_xinput,
-    N_("Enable XInput support"), NULL
+    N_("Disable XInput support"), NULL
   },
 #endif /* HAVE_XINPUT */
   { NULL }
@@ -782,7 +774,6 @@ clutter_backend_x11_create_stage (ClutterBackend  *backend,
 				  ClutterStage    *wrapper,
 				  GError         **error)
 {
-  ClutterBackendX11 *backend_x11 = CLUTTER_BACKEND_X11 (backend);
   ClutterEventTranslator *translator;
   ClutterStageWindow *stage;
 
@@ -796,9 +787,9 @@ clutter_backend_x11_create_stage (ClutterBackend  *backend,
   _clutter_backend_add_event_translator (backend, translator);
 
   CLUTTER_NOTE (MISC, "X11 stage created (display:%p, screen:%d, root:%u)",
-                backend_x11->xdpy,
-                backend_x11->xscreen_num,
-                (unsigned int) backend_x11->xwin_root);
+                CLUTTER_BACKEND_X11 (backend)->xdpy,
+                CLUTTER_BACKEND_X11 (backend)->xscreen_num,
+                (unsigned int) CLUTTER_BACKEND_X11 (backend)->xwin_root);
 
   return stage;
 }
@@ -847,7 +838,7 @@ error_handler(Display     *xdpy,
  *
  * Traps every X error until clutter_x11_untrap_x_errors() is called.
  *
- * Since: 0.6
+ *
  */
 void
 clutter_x11_trap_x_errors (void)
@@ -863,7 +854,7 @@ clutter_x11_trap_x_errors (void)
  *
  * Return value: the trapped error code, or 0 for success
  *
- * Since: 0.4
+ *
  */
 gint
 clutter_x11_untrap_x_errors (void)
@@ -880,7 +871,7 @@ clutter_x11_untrap_x_errors (void)
  *
  * Return value: (transfer none): the default display
  *
- * Since: 0.6
+ *
  */
 Display *
 clutter_x11_get_default_display (void)
@@ -915,7 +906,7 @@ clutter_x11_get_default_display (void)
  * g_option_context_parse() yourself, you should also call
  * clutter_x11_set_display() before g_option_context_parse().
  *
- * Since: 0.8
+ *
  */
 void
 clutter_x11_set_display (Display *xdpy)
@@ -941,20 +932,10 @@ clutter_x11_set_display (Display *xdpy)
  *
  * Since XInput might not be supported by the X server, you might
  * want to use clutter_x11_has_xinput() to see if support was enabled.
- *
- * Since: 0.8
  */
 void
 clutter_x11_enable_xinput (void)
 {
-  if (_clutter_context_is_initialized ())
-    {
-      g_warning ("%s() can only be used before calling clutter_init()",
-                 G_STRFUNC);
-      return;
-    }
-
-  clutter_enable_xinput = TRUE;
 }
 
 /**
@@ -980,7 +961,7 @@ clutter_x11_enable_xinput (void)
  *
  * This function should not be normally used by applications.
  *
- * Since: 0.8
+ *
  */
 void
 clutter_x11_disable_event_retrieval (void)
@@ -1002,7 +983,7 @@ clutter_x11_disable_event_retrieval (void)
  *
  * Return value: TRUE if event retrival has been disabled. FALSE otherwise.
  *
- * Since: 0.8
+ *
  */
 gboolean
 clutter_x11_has_event_retrieval (void)
@@ -1017,7 +998,7 @@ clutter_x11_has_event_retrieval (void)
  *
  * Return value: the number of the default screen
  *
- * Since: 0.6
+ *
  */
 int
 clutter_x11_get_default_screen (void)
@@ -1046,7 +1027,7 @@ clutter_x11_get_default_screen (void)
  *
  * Return value: the id of the root window
  *
- * Since: 0.6
+ *
  */
 Window
 clutter_x11_get_root_window (void)
@@ -1075,7 +1056,7 @@ clutter_x11_get_root_window (void)
  *
  * Adds an event filter function.
  *
- * Since: 0.6
+ *
  */
 void
 clutter_x11_add_filter (ClutterX11FilterFunc func,
@@ -1118,7 +1099,7 @@ clutter_x11_add_filter (ClutterX11FilterFunc func,
  *
  * Removes the given filter function.
  *
- * Since: 0.6
+ *
  */
 void
 clutter_x11_remove_filter (ClutterX11FilterFunc func,
@@ -1167,39 +1148,12 @@ clutter_x11_remove_filter (ClutterX11FilterFunc func,
 }
 
 /**
- * clutter_x11_get_input_devices:
- *
- * Retrieves a pointer to the list of input devices
- *
- * Deprecated: 1.2: Use clutter_device_manager_peek_devices() instead
- *
- * Since: 0.8
- *
- * Return value: (transfer none) (element-type Clutter.InputDevice): a
- *   pointer to the internal list of input devices; the returned list is
- *   owned by Clutter and should not be modified or freed
- */
-const GSList *
-clutter_x11_get_input_devices (void)
-{
-  ClutterDeviceManager *manager;
-
-  manager = clutter_device_manager_get_default ();
-  if (manager == NULL)
-    return NULL;
-
-  return clutter_device_manager_peek_devices (manager);
-}
-
-/**
  * clutter_x11_has_xinput:
  *
  * Gets whether Clutter has XInput support.
  *
  * Return value: %TRUE if Clutter was compiled with XInput support
  *   and XInput support is available at run time.
- *
- * Since: 0.8
  */
 gboolean
 clutter_x11_has_xinput (void)
@@ -1289,7 +1243,7 @@ clutter_x11_has_composite_extension (void)
  * <note>This function can only be called once, and before clutter_init() is
  * called.</note>
  *
- * Since: 1.2
+ *
  */
 void
 clutter_x11_set_use_argb_visual (gboolean use_argb)
@@ -1314,7 +1268,7 @@ clutter_x11_set_use_argb_visual (gboolean use_argb)
  *
  * Return value: %TRUE if ARGB visuals are queried by default
  *
- * Since: 1.2
+ *
  */
 gboolean
 clutter_x11_get_use_argb_visual (void)
@@ -1338,7 +1292,7 @@ _clutter_backend_x11_get_visual_info (ClutterBackendX11 *backend_x11)
  *   <varname>None</varname>. The returned value should be freed using XFree()
  *   when done
  *
- * Since: 1.2
+ *
  */
 XVisualInfo *
 clutter_x11_get_visual_info (void)

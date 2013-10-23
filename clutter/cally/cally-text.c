@@ -39,35 +39,6 @@
  *
  */
 
-/*
- * IMPLEMENTATION NOTES:
- *
- * * AtkText: There are still some methods not implemented yet:
- *     atk_text_get_default_attributes
- *     atk_text_get_character_extents
- *     atk_text_get_offset_at_point
- *
- *     See details on bug CB#1733
- *
- * * AtkEditableText: some methods will not be implemented
- *
- *     * atk_editable_text_set_run_attributes: ClutterText has some
- *       properties equivalent to the AtkAttributte, but it doesn't
- *       allow you to define it by
- *
- *     * atk_editable_text_copy: Clutter has no Clipboard support
- *
- *     * atk_editable_text_paste: Clutter has no Clipboard support
- *
- *     * atk_editable_text_cut: Clutter has no Clipboard support. In
- *           this case, as cut is basically a copy&delete combination,
- *           we could have implemented it using the delete, but IMHO,
- *           it would be weird to cut a text, get the text removed and
- *           then not be able to paste the text
- *
- *     See details on bug CB#1734
- */
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -345,9 +316,9 @@ cally_text_real_initialize(AtkObject *obj,
   _check_activate_action (cally_text, clutter_text);
 
   if (clutter_text_get_password_char (clutter_text) != 0)
-    obj->role = ATK_ROLE_PASSWORD_TEXT;
+    atk_object_set_role (obj, ATK_ROLE_PASSWORD_TEXT);
   else
-    obj->role = ATK_ROLE_TEXT;
+    atk_object_set_role (obj, ATK_ROLE_TEXT);
 }
 
 static AtkStateSet*
@@ -1106,13 +1077,28 @@ cally_text_get_text (AtkText *text,
                      gint end_offset)
 {
   ClutterActor *actor = NULL;
+  PangoLayout *layout = NULL;
+  const gchar *string = NULL;
+  gint character_count = 0;
 
   actor = CALLY_GET_CLUTTER_ACTOR (text);
   if (actor == NULL) /* Object is defunct */
     return NULL;
 
-  return clutter_text_get_chars (CLUTTER_TEXT (actor),
-                                 start_offset, end_offset);
+  /* we use the pango layout instead of clutter_text_get_chars because
+     it take into account password-char */
+
+  layout = clutter_text_get_layout (CLUTTER_TEXT (actor));
+  string = pango_layout_get_text (layout);
+  character_count = pango_layout_get_character_count (layout);
+
+  if (end_offset == -1 || end_offset > character_count)
+    end_offset = character_count;
+
+  if (string[0] == 0)
+    return g_strdup("");
+  else
+    return g_utf8_substring (string, start_offset, end_offset);
 }
 
 static gunichar
@@ -1120,15 +1106,21 @@ cally_text_get_character_at_offset (AtkText *text,
                                     gint     offset)
 {
   ClutterActor *actor      = NULL;
-  gchar        *string     = NULL;
+  const gchar  *string     = NULL;
   gchar        *index      = NULL;
   gunichar      unichar;
+  PangoLayout  *layout = NULL;
 
   actor = CALLY_GET_CLUTTER_ACTOR (text);
   if (actor == NULL) /* State is defunct */
     return '\0';
 
-  string = clutter_text_get_chars (CLUTTER_TEXT (actor), 0, -1);
+  /* we use the pango layout instead of clutter_text_get_chars because
+     it take into account password-char */
+
+  layout = clutter_text_get_layout (CLUTTER_TEXT (actor));
+  string = pango_layout_get_text (layout);
+
   if (offset >= g_utf8_strlen (string, -1))
     {
       unichar = '\0';
@@ -1137,10 +1129,8 @@ cally_text_get_character_at_offset (AtkText *text,
     {
       index = g_utf8_offset_to_pointer (string, offset);
 
-      unichar = g_utf8_get_char(index);
+      unichar = g_utf8_get_char (index);
     }
-
-  g_free(string);
 
   return unichar;
 }
@@ -1624,7 +1614,6 @@ cally_text_editable_text_interface_init (AtkEditableTextIface *iface)
   iface->insert_text = cally_text_insert_text;
   iface->delete_text = cally_text_delete_text;
 
-  /* Not implemented, see IMPLEMENTATION NOTES*/
   iface->set_run_attributes = NULL;
   iface->copy_text = NULL;
   iface->cut_text = NULL;

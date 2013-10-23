@@ -31,7 +31,7 @@
 #include <cairo.h>
 #include <pango/pango.h>
 
-#ifdef COGL_ENABLE_EXPERIMENTAL_2_0_API
+#ifdef COGL_ENABLE_EXPERIMENTAL_API
 #include <cogl/cogl.h>
 #endif
 
@@ -50,7 +50,7 @@ G_BEGIN_DECLS
  * <structname>ClutterBackend</structname> is an opaque structure whose
  * members cannot be directly accessed.
  *
- * Since: 0.4
+ *
  */
 typedef struct _ClutterBackend          ClutterBackend;
 typedef struct _ClutterBackendClass     ClutterBackendClass;

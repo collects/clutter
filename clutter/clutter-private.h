@@ -163,8 +163,8 @@ struct _ClutterMainContext
   PangoContext *pango_context;  /* Global Pango context */
   CoglPangoFontMap *font_map;   /* Global font map */
 
-  ClutterEvent *current_event;
-  guint32 last_event_time;
+  /* stack of #ClutterEvent */
+  GSList *current_event;
 
   /* list of repaint functions installed through
    * clutter_threads_add_repaint_func()
@@ -211,6 +211,7 @@ guint32                 _clutter_context_acquire_id                     (gpointe
 void                    _clutter_context_release_id                     (guint32       id_);
 gboolean                _clutter_context_get_motion_events_enabled      (void);
 gboolean                _clutter_context_get_show_fps                   (void);
+guint                   _clutter_context_get_frame_rate                 (void);
 
 const gchar *_clutter_gettext (const gchar *str);
 

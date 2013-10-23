@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <clutter/clutter.h>
+#ifdef CLUTTER_WINDOWING_X11
+#include <clutter/x11/clutter-x11.h>
+#endif
 
 static ClutterActor *
 create_content_actor (void)

@@ -28,9 +28,9 @@
  * @Short_Description: Action to rotate an actor
  *
  * #ClutterRotateAction is a sub-class of #ClutterGestureAction that implements
- * the logic for recognizing rotate gestures.
+ * the logic for recognizing rotate gestures using two touch points.
  *
- * Since: 1.12
+ *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -151,7 +151,7 @@ clutter_rotate_action_gesture_progress (ClutterGestureAction *action,
         angle = -angle;
 
       /* Convert radians to degrees */
-      angle = angle * 180.0 / M_PI;
+      angle = angle * 180.0 / G_PI;
 
       g_signal_emit (action, rotate_signals[ROTATE], 0,
                      actor, angle,
@@ -200,7 +200,7 @@ clutter_rotate_action_class_init (ClutterRotateActionClass *klass)
    * Return value: %TRUE if the rotation should continue, and %FALSE if
    *   the rotation should be cancelled.
    *
-   * Since: 1.12
+   *
    */
   rotate_signals[ROTATE] =
     g_signal_new (I_("rotate"),
@@ -230,7 +230,7 @@ clutter_rotate_action_init (ClutterRotateAction *self)
  *
  * Return value: the newly created #ClutterRotateAction
  *
- * Since: 1.12
+ *
  */
 ClutterAction *
 clutter_rotate_action_new (void)

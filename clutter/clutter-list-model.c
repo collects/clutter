@@ -750,7 +750,7 @@ clutter_list_model_init (ClutterListModel *model)
  *
  * Return value: a new #ClutterListModel
  *
- * Since: 0.6
+ *
  */
 ClutterModel *
 clutter_list_model_new (guint n_columns,
@@ -776,15 +776,16 @@ clutter_list_model_new (guint n_columns,
         {
           g_warning ("%s: Invalid type %s\n", G_STRLOC, g_type_name (type));
           g_object_unref (model);
-          return NULL;
+          model = NULL;
+          goto out;
         }
 
       _clutter_model_set_column_type (model, i, type);
       _clutter_model_set_column_name (model, i, name);
     }
 
+ out:
   va_end (args);
-
   return model;
 }
 
@@ -799,7 +800,7 @@ clutter_list_model_new (guint n_columns,
  *
  * Return value: (transfer full): a new default #ClutterModel
  *
- * Since: 0.6
+ *
  */
 ClutterModel *
 clutter_list_model_newv (guint                n_columns,

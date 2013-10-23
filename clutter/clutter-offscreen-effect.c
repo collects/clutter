@@ -139,9 +139,21 @@ clutter_offscreen_effect_real_create_texture (ClutterOffscreenEffect *effect,
                                               gfloat                  width,
                                               gfloat                  height)
 {
-  return cogl_texture_new_with_size (MAX (width, 1), MAX (height, 1),
-                                     COGL_TEXTURE_NO_SLICING,
-                                     COGL_PIXEL_FORMAT_RGBA_8888_PRE);
+  CoglError *error = NULL;
+  CoglHandle texture = cogl_texture_new_with_size (MAX (width, 1), MAX (height, 1),
+                                                   COGL_TEXTURE_NO_SLICING,
+                                                   COGL_PIXEL_FORMAT_RGBA_8888_PRE);
+
+  if (!cogl_texture_allocate (texture, &error))
+    {
+#if CLUTTER_ENABLE_DEBUG
+      g_warning ("Unable to allocate texture for offscreen effect: %s", error->message);
+#endif /* CLUTTER_ENABLE_DEBUG */
+      cogl_error_free (error);
+      return NULL;
+    }
+
+  return texture;
 }
 
 static gboolean
@@ -502,7 +514,7 @@ clutter_offscreen_effect_init (ClutterOffscreenEffect *self)
  *   returned texture is owned by Clutter and it should not be
  *   modified or freed
  *
- * Since: 1.10
+ *
  */
 CoglHandle
 clutter_offscreen_effect_get_texture (ClutterOffscreenEffect *effect)
@@ -527,7 +539,7 @@ clutter_offscreen_effect_get_texture (ClutterOffscreenEffect *effect)
  *   returned material is owned by Clutter and it should not be
  *   modified or freed
  *
- * Since: 1.4
+ *
  */
 CoglMaterial *
 clutter_offscreen_effect_get_target (ClutterOffscreenEffect *effect)
@@ -544,7 +556,7 @@ clutter_offscreen_effect_get_target (ClutterOffscreenEffect *effect)
  *
  * Calls the paint_target() virtual function of the @effect
  *
- * Since: 1.4
+ *
  */
 void
 clutter_offscreen_effect_paint_target (ClutterOffscreenEffect *effect)
@@ -566,7 +578,7 @@ clutter_offscreen_effect_paint_target (ClutterOffscreenEffect *effect)
  *   %COGL_INVALID_HANDLE. The returned handle has its reference
  *   count increased.
  *
- * Since: 1.4
+ *
  */
 CoglHandle
 clutter_offscreen_effect_create_texture (ClutterOffscreenEffect *effect,
@@ -596,8 +608,6 @@ clutter_offscreen_effect_create_texture (ClutterOffscreenEffect *effect,
  *
  * Return value: %TRUE if the offscreen buffer has a valid size,
  *   and %FALSE otherwise
- *
- * Since: 1.8
  */
 gboolean
 clutter_offscreen_effect_get_target_size (ClutterOffscreenEffect *effect,
@@ -618,6 +628,44 @@ clutter_offscreen_effect_get_target_size (ClutterOffscreenEffect *effect,
 
   if (height)
     *height = cogl_texture_get_height (priv->texture);
+
+  return TRUE;
+}
+
+/**
+ * clutter_offscreen_effect_get_target_rect:
+ * @effect: a #ClutterOffscreenEffect
+ * @rect: (out caller-allocates): return location for the target area
+ *
+ * Retrieves the origin and size of the offscreen buffer used by @effect to
+ * paint the actor to which it has been applied.
+ *
+ * This function should only be called by #ClutterOffscreenEffect
+ * implementations, from within the <function>paint_target()</function>
+ * virtual function.
+ *
+ * Return value: %TRUE if the offscreen buffer has a valid rectangle,
+ *   and %FALSE otherwise
+ */
+gboolean
+clutter_offscreen_effect_get_target_rect (ClutterOffscreenEffect *effect,
+                                          ClutterRect            *rect)
+{
+  ClutterOffscreenEffectPrivate *priv;
+
+  g_return_val_if_fail (CLUTTER_IS_OFFSCREEN_EFFECT (effect), FALSE);
+  g_return_val_if_fail (rect != NULL, FALSE);
+
+  priv = effect->priv;
+
+  if (priv->texture == NULL)
+    return FALSE;
+
+  clutter_rect_init (rect,
+                     priv->x_offset,
+                     priv->y_offset,
+                     cogl_texture_get_width (priv->texture),
+                     cogl_texture_get_height (priv->texture));
 
   return TRUE;
 }

@@ -362,18 +362,21 @@ set_cursor_visible (ClutterStageX11 *stage_x11)
 
   if (stage_x11->is_cursor_visible)
     {
-#if 0 /* HAVE_XFIXES - seems buggy/unreliable */
-      XFixesShowCursor (backend_x11->xdpy, stage_x11->xwin);
+#if HAVE_XFIXES
+      if (stage_x11->cursor_hidden_xfixes)
+        {
+          XFixesShowCursor (backend_x11->xdpy, stage_x11->xwin);
+          stage_x11->cursor_hidden_xfixes = FALSE;
+        }
 #else
       XUndefineCursor (backend_x11->xdpy, stage_x11->xwin);
 #endif /* HAVE_XFIXES */
     }
   else
     {
-#if 0 /* HAVE_XFIXES - seems buggy/unreliable, check cursor in firefox 
-       *               loading page after hiding.  
-      */
+#if HAVE_XFIXES
       XFixesHideCursor (backend_x11->xdpy, stage_x11->xwin);
+      stage_x11->cursor_hidden_xfixes = TRUE;
 #else
       XColor col;
       Pixmap pix;
@@ -877,6 +880,7 @@ clutter_stage_x11_init (ClutterStageX11 *stage)
   stage->is_foreign_xwin = FALSE;
   stage->fullscreening = FALSE;
   stage->is_cursor_visible = TRUE;
+  stage->cursor_hidden_xfixes = FALSE;
   stage->accept_focus = TRUE;
 
   stage->title = NULL;
@@ -922,12 +926,14 @@ handle_wm_protocols_event (ClutterBackendX11 *backend_x11,
                            ClutterStageX11   *stage_x11,
                            XEvent            *xevent)
 {
-  ClutterStageCogl *stage_cogl = CLUTTER_STAGE_COGL (stage_x11);
   Atom atom = (Atom) xevent->xclient.data.l[0];
 
   if (atom == backend_x11->atom_WM_DELETE_WINDOW &&
       xevent->xany.window == stage_x11->xwin)
     {
+#ifdef CLUTTER_ENABLE_DEBUG
+      ClutterStageCogl *stage_cogl = CLUTTER_STAGE_COGL (stage_x11);
+
       /* the WM_DELETE_WINDOW is a request: we do not destroy
        * the window right away, as it might contain vital data;
        * we relay the event to the application and we let it
@@ -937,6 +943,7 @@ handle_wm_protocols_event (ClutterBackendX11 *backend_x11,
                     _clutter_actor_get_debug_name (CLUTTER_ACTOR (stage_cogl->wrapper)),
                     stage_cogl->wrapper,
                     (unsigned int) stage_x11->xwin);
+#endif /* CLUTTER_ENABLE_DEBUG */
 
       set_user_time (backend_x11, stage_x11, xevent->xclient.data.l[1]);
 
@@ -1154,6 +1161,26 @@ clutter_stage_x11_translate_event (ClutterEventTranslator *translator,
         }
       break;
 
+    case EnterNotify:
+#if HAVE_XFIXES
+      if (!stage_x11->is_cursor_visible && !stage_x11->cursor_hidden_xfixes)
+        {
+          XFixesHideCursor (backend_x11->xdpy, stage_x11->xwin);
+          stage_x11->cursor_hidden_xfixes = TRUE;
+        }
+#endif
+      break;
+
+    case LeaveNotify:
+#if HAVE_XFIXES
+      if (stage_x11->cursor_hidden_xfixes)
+        {
+          XFixesShowCursor (backend_x11->xdpy, stage_x11->xwin);
+          stage_x11->cursor_hidden_xfixes = FALSE;
+        }
+#endif
+      break;
+
     case Expose:
       {
         XExposeEvent *expose = (XExposeEvent *) xevent;
@@ -1231,7 +1258,7 @@ clutter_event_translator_iface_init (ClutterEventTranslatorIface *iface)
  *
  * Return value: An XID for the stage window.
  *
- * Since: 0.4
+ *
  */
 Window
 clutter_x11_get_stage_window (ClutterStage *stage)
@@ -1265,7 +1292,7 @@ clutter_x11_get_stage_window_from_window (Window win)
  * Return value: (transfer none): A #ClutterStage, or% NULL if a stage
  *   does not exist for the window
  *
- * Since: 0.8
+ *
  */
 ClutterStage *
 clutter_x11_get_stage_from_window (Window win)
@@ -1278,37 +1305,6 @@ clutter_x11_get_stage_from_window (Window win)
     return stage_cogl->wrapper;
 
   return NULL;
-}
-
-/**
- * clutter_x11_get_stage_visual: (skip)
- * @stage: a #ClutterStage
- *
- * Returns an XVisualInfo suitable for creating a foreign window for the given
- * stage. NOTE: It doesn't do as the name may suggest, which is return the
- * XVisualInfo that was used to create an existing window for the given stage.
- *
- * XXX: It might be best to deprecate this function and replace with something
- * along the lines of clutter_backend_x11_get_foreign_visual () or perhaps
- * clutter_stage_x11_get_foreign_visual ()
- *
- * Return value: (transfer full): An XVisualInfo suitable for creating a
- *   foreign stage. Use XFree() to free the returned value instead
- *
- * Deprecated: 1.2: Use clutter_x11_get_visual_info() instead
- *
- * Since: 0.4
- */
-XVisualInfo *
-clutter_x11_get_stage_visual (ClutterStage *stage)
-{
-  ClutterBackend *backend = clutter_get_default_backend ();
-  ClutterBackendX11 *backend_x11;
-
-  g_return_val_if_fail (CLUTTER_IS_BACKEND_X11 (backend), NULL);
-  backend_x11 = CLUTTER_BACKEND_X11 (backend);
-
-  return _clutter_backend_x11_get_visual_info (backend_x11);
 }
 
 typedef struct {
@@ -1367,7 +1363,7 @@ set_foreign_window_callback (ClutterActor *actor,
  *
  * Return value: %TRUE if foreign window is valid
  *
- * Since: 0.4
+ *
  */
 gboolean
 clutter_x11_set_stage_foreign (ClutterStage *stage,

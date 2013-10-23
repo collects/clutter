@@ -27,7 +27,7 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildWin)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
@@ -51,7 +51,7 @@
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="2"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -66,12 +66,12 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildGDK)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0"
+				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0;$(GlibEtcInstallRoot)\include\gdk-pixbuf-2.0"
 				PreprocessorDefinitions="$(DebugLibBuildDefines);$(ClutterBuildDefines)"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -86,11 +86,11 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-win32-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
+				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="2"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -104,7 +104,7 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildWin)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
@@ -128,7 +128,7 @@
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="2"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="17"
@@ -143,12 +143,12 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildGDK)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0"
+				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0;$(GlibEtcInstallRoot)\include\gdk-pixbuf-2.0"
 				PreprocessorDefinitions="$(DebugLibBuildDefines);$(ClutterBuildDefines)"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -163,11 +163,11 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-win32-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
+				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="2"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="17"
@@ -182,7 +182,7 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildWin)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
@@ -206,7 +206,7 @@
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="1"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
@@ -224,13 +224,13 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildGDK)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0"
+				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0;$(GlibEtcInstallRoot)\include\gdk-pixbuf-2.0"
 				PreprocessorDefinitions="$(ReleaseLibBuildDefines);$(ClutterBuildDefines)"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
@@ -244,11 +244,11 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-win32-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
+				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="1"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
@@ -264,7 +264,7 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildWin)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
@@ -285,7 +285,7 @@
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="2"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
@@ -302,11 +302,11 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				CommandLine="$(PreBuildGDK)$(PreBuildCmd2)"
+				CommandLine="$(DoConfigs)"
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0"
+				AdditionalIncludeDirectories="..\..\..\clutter;..\..\..\clutter\win32;..\..\..\clutter\deprecated;..\..\..\clutter\cally;$(GlibEtcInstallRoot)\include\gtk-3.0;$(GlibEtcInstallRoot)\include\gdk-pixbuf-2.0"
 				PreprocessorDefinitions="$(ReleaseLibBuildDefines);$(ClutterBuildDefines)"
 				RuntimeLibrary="2"
 				UsePrecompiledHeader="0"
@@ -319,11 +319,11 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-win32-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
+				AdditionalDependencies="opengl32.lib winmm.lib intl.lib json-glib-1.0.lib gdk-3.0.lib pangocairo-1.0.lib pango-1.0.lib cairo-gobject.lib cairo.lib atk-1.0.lib gmodule-2.0.lib gio-2.0.lib"
 				OutputFile="$(OutDir)\$(ClutterDllPrefix)$(ProjectName)$(ClutterDllSuffix).dll"
 				LinkIncremental="2"
 				ModuleDefinitionFile="$(IntDir)\clutter.def"
-				ImportLibrary="$(TargetDir)$(ProjectName)-$(ClutterApiVersion).lib"
+				ImportLibrary="$(TargetDir)$(ProjectName)-$(ApiVersion).lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
@@ -386,6 +386,204 @@
 			Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav"
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
+			<File RelativePath="..\..\..\clutter\clutter-enum-types.h.in">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug_GDK|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release_GDK|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug_GDK|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release_GDK|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Enumeration Sources..."
+						CommandLine="$(GenEnumsSrc)"
+						Outputs="..\..\..\clutter\clutter-enum-types.h;..\..\..\clutter\clutter-enum-types.c"
+					/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath="..\..\..\clutter\clutter-marshal.list">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug_GDK|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release_GDK|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug_GDK|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release_GDK|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating Marshalling Sources..."
+						CommandLine="$(GenMarshalSrc)"
+						Outputs="..\..\..\clutter\clutter-marshal.h;..\..\..\clutter\clutter-marshal.c"
+					/>
+				</FileConfiguration>
+			</File>
+			<File RelativePath="..\..\..\clutter\clutter.symbols">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug_GDK|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterGDKDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release_GDK|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterGDKDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Debug_GDK|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterGDKDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+				<FileConfiguration Name="Release_GDK|x64">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Generating clutter.def..."
+						CommandLine="$(GenerateClutterGDKDef)"
+						Outputs="$(IntDir)\clutter.def"
+					/>
+				</FileConfiguration>
+			</File>
 			<File RelativePath="..\..\..\clutter\win32\resources.rc" />
 		</Filter>
 	</Files>

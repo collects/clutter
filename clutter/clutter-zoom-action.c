@@ -28,7 +28,8 @@
  * @Short_Description: Action enabling zooming on actors
  *
  * #ClutterZoomAction is a sub-class of #ClutterGestureAction that
- * implements all the necessary logic for zooming actors.
+ * implements all the necessary logic for zooming actors using a "pinch"
+ * gesture between two touch points.
  *
  * The simplest usage of #ClutterZoomAction consists in adding it to
  * a #ClutterActor and setting it as reactive; for instance, the following
@@ -40,9 +41,9 @@
  * ]|
  *
  * will automatically result in the actor to be scale according to the
- * distance between 2 touch points.
+ * distance between two touch points.
  *
- * Since: 1.12
+ *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -80,6 +81,7 @@ struct _ClutterZoomActionPrivate
 
   ZoomPoint points[2];
 
+  ClutterPoint initial_focal_point;
   ClutterPoint focal_point;
   ClutterPoint transformed_focal_point;
 
@@ -118,10 +120,10 @@ G_DEFINE_TYPE (ClutterZoomAction, clutter_zoom_action, CLUTTER_TYPE_GESTURE_ACTI
 static void
 capture_point_initial_position (ClutterGestureAction *action,
                                 ClutterActor         *actor,
-                                gint                  device,
+                                gint                  index,
                                 ZoomPoint            *point)
 {
-  clutter_gesture_action_get_motion_coords (action, device,
+  clutter_gesture_action_get_motion_coords (action, index,
                                             &point->start_x,
                                             &point->start_y);
 
@@ -138,10 +140,10 @@ capture_point_initial_position (ClutterGestureAction *action,
 static void
 capture_point_update_position (ClutterGestureAction *action,
                                ClutterActor         *actor,
-                               gint                  device,
+                               gint                  index,
                                ZoomPoint            *point)
 {
-  clutter_gesture_action_get_motion_coords (action, device,
+  clutter_gesture_action_get_motion_coords (action, index,
                                             &point->update_x,
                                             &point->update_y);
 
@@ -175,6 +177,18 @@ clutter_zoom_action_gesture_begin (ClutterGestureAction *action,
                            &priv->initial_scale_x,
                            &priv->initial_scale_y);
 
+  priv->initial_focal_point.x = (priv->points[0].start_x + priv->points[1].start_x) / 2;
+  priv->initial_focal_point.y = (priv->points[0].start_y + priv->points[1].start_y) / 2;
+  clutter_actor_transform_stage_point (actor,
+                                       priv->initial_focal_point.x,
+                                       priv->initial_focal_point.y,
+                                       &priv->transformed_focal_point.x,
+                                       &priv->transformed_focal_point.y);
+
+  clutter_actor_set_pivot_point (actor,
+                                 priv->transformed_focal_point.x / clutter_actor_get_width (actor),
+                                 priv->transformed_focal_point.y / clutter_actor_get_height (actor));
+
   return TRUE;
 }
 
@@ -199,11 +213,6 @@ clutter_zoom_action_gesture_progress (ClutterGestureAction *action,
 
   priv->focal_point.x = (priv->points[0].update_x + priv->points[1].update_x) / 2;
   priv->focal_point.y = (priv->points[0].update_y + priv->points[1].update_y) / 2;
-  priv->transformed_focal_point.x = (priv->points[0].transformed_update_x +
-                                     priv->points[1].transformed_update_x) / 2;
-  priv->transformed_focal_point.y = (priv->points[0].transformed_update_y +
-                                     priv->points[1].transformed_update_y) / 2;
-
 
   new_scale = distance / priv->zoom_initial_distance;
 
@@ -234,10 +243,15 @@ clutter_zoom_action_real_zoom (ClutterZoomAction *action,
                                gdouble            factor)
 {
   ClutterZoomActionPrivate *priv = action->priv;
-  ClutterActor *parent = clutter_actor_get_parent (actor);
   gfloat x, y, z;
   gdouble scale_x, scale_y;
   ClutterVertex out, in;
+
+  in.x = priv->transformed_focal_point.x;
+  in.y = priv->transformed_focal_point.y;
+  in.z = 0;
+
+  clutter_actor_apply_transform_to_point (actor, &in, &out);
 
   clutter_actor_get_scale (actor, &scale_x, &scale_y);
 
@@ -259,21 +273,10 @@ clutter_zoom_action_real_zoom (ClutterZoomAction *action,
       break;
     }
 
-
-  in.x = priv->transformed_focal_point.x;
-  in.y = priv->transformed_focal_point.y;
-  in.z = 0;
-
-  clutter_actor_apply_relative_transform_to_point (actor,
-                                                   parent,
-                                                   &in, &out);
-
-
-  clutter_actor_get_translation (actor, &x, &y, &z);
-  clutter_actor_set_translation (actor,
-                                 x + priv->focal_point.x - out.x,
-                                 y + priv->focal_point.y - out.y,
-                                 z);
+  x = priv->initial_x + priv->focal_point.x - priv->initial_focal_point.x;
+  y = priv->initial_y + priv->focal_point.y - priv->initial_focal_point.y;
+  clutter_actor_get_translation (actor, NULL, NULL, &z);
+  clutter_actor_set_translation (actor, x, y, z);
 
   return TRUE;
 }
@@ -346,7 +349,7 @@ clutter_zoom_action_class_init (ClutterZoomActionClass *klass)
    *
    * Constraints the zooming action to the specified axis
    *
-   * Since: 1.12
+   *
    */
   zoom_props[PROP_ZOOM_AXIS] =
     g_param_spec_enum ("zoom-axis",
@@ -364,28 +367,22 @@ clutter_zoom_action_class_init (ClutterZoomActionClass *klass)
    * ClutterZoomAction::zoom:
    * @action: the #ClutterZoomAction that emitted the signal
    * @actor: the #ClutterActor attached to the action
-   * @distance: the initial distance between the 2 touch points
+   * @focal_point: the focal point of the zoom
+   * @factor: the initial distance between the 2 touch points
    *
-   * The ::zoom signal is emitted for each touch event after the
-   * #ClutterZoomAction::zoom-begin signal has been emitted.
-   *
-   * The components of the distance between the touch begin event and
-   * the latest touch update event are computed in the actor's
-   * coordinate space, to take into account eventual transformations.
-   * If you want the stage coordinates of the latest motion event you
-   * can use clutter_zoom_action_get_motion_coords().
+   * The ::zoom signal is emitted for each series of touch events that
+   * change the distance and focal point between the touch points.
    *
    * The default handler of the signal will call
    * clutter_actor_set_scale() on @actor using the ratio of the first
-   * distance between the 2 touch points and the current distance. If
-   * you want to override the default behaviour, you can connect to
-   * this signal and call g_signal_stop_emission_by_name() from within
-   * your callback.
+   * distance between the touch points and the current distance. To
+   * override the default behaviour, connect to this signal and return
+   * %FALSE.
    *
-   * Return value: %TRUE if the zoom action has been handled by one of
-   * the listener or %FALSE to continue the emission.
+   * Return value: %TRUE if the zoom should continue, and %FALSE if
+   *   the zoom should be cancelled.
    *
-   * Since: 1.12
+   *
    */
   zoom_signals[ZOOM] =
     g_signal_new (I_("zoom"),
@@ -418,7 +415,7 @@ clutter_zoom_action_init (ClutterZoomAction *self)
  *
  * Return value: the newly created #ClutterZoomAction
  *
- * Since: 1.12
+ *
  */
 ClutterAction *
 clutter_zoom_action_new (void)
@@ -433,7 +430,7 @@ clutter_zoom_action_new (void)
  *
  * Restricts the zooming action to a specific axis
  *
- * Since: 1.12
+ *
  */
 void
 clutter_zoom_action_set_zoom_axis (ClutterZoomAction *action,
@@ -459,7 +456,7 @@ clutter_zoom_action_set_zoom_axis (ClutterZoomAction *action,
  *
  * Return value: the axis constraint
  *
- * Since: 1.12
+ *
  */
 ClutterZoomAxis
 clutter_zoom_action_get_zoom_axis (ClutterZoomAction *action)
@@ -477,7 +474,7 @@ clutter_zoom_action_get_zoom_axis (ClutterZoomAction *action)
  *
  * Retrieves the focal point of the current zoom
  *
- * Since: 1.12
+ *
  */
 void
 clutter_zoom_action_get_focal_point (ClutterZoomAction *action,
@@ -497,7 +494,7 @@ clutter_zoom_action_get_focal_point (ClutterZoomAction *action,
  * Retrieves the focal point relative to the actor's coordinates of
  * the current zoom
  *
- * Since: 1.12
+ *
  */
 void
 clutter_zoom_action_get_transformed_focal_point (ClutterZoomAction *action,

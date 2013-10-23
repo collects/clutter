@@ -40,7 +40,7 @@ G_BEGIN_DECLS
  *
  * Priority for event handling.
  *
- * Since: 0.4
+ *
  */
 #define CLUTTER_PRIORITY_EVENTS         (G_PRIORITY_DEFAULT)
 
@@ -49,7 +49,7 @@ G_BEGIN_DECLS
  *
  * Default value for "now".
  *
- * Since: 0.4
+ *
  */
 #define CLUTTER_CURRENT_TIME            (0L)
 
@@ -59,7 +59,7 @@ G_BEGIN_DECLS
  * Continues the propagation of an event; this macro should be
  * used in event-related signals.
  *
- * Since: 1.10
+ *
  */
 #define CLUTTER_EVENT_PROPAGATE         (FALSE)
 
@@ -69,7 +69,7 @@ G_BEGIN_DECLS
  * Stops the propagation of an event; this macro should be used
  * in event-related signals.
  *
- * Since: 1.10
+ *
  */
 #define CLUTTER_EVENT_STOP              (TRUE)
 
@@ -81,7 +81,7 @@ G_BEGIN_DECLS
  * This is typically the left mouse button in a right-handed
  * mouse configuration.
  *
- * Since: 1.10
+ *
  */
 #define CLUTTER_BUTTON_PRIMARY          (1)
 
@@ -90,7 +90,7 @@ G_BEGIN_DECLS
  *
  * The middle button of a pointer device.
  *
- * Since: 1.10
+ *
  */
 #define CLUTTER_BUTTON_MIDDLE           (2)
 
@@ -102,7 +102,7 @@ G_BEGIN_DECLS
  * This is typically the right mouse button in a right-handed
  * mouse configuration.
  *
- * Since: 1.10
+ *
  */
 #define CLUTTER_BUTTON_SECONDARY        (3)
 
@@ -124,7 +124,7 @@ typedef struct _ClutterTouchEvent       ClutterTouchEvent;
  *
  * Common members for a #ClutterEvent
  *
- * Since: 0.2
+ *
  */
 struct _ClutterAnyEvent
 {
@@ -146,11 +146,12 @@ struct _ClutterAnyEvent
  * @keyval: raw key value
  * @hardware_keycode: raw hardware key value
  * @unicode_value: Unicode representation
- * @device: reserved for future use
+ * @device: the device that originated the event. If you want the physical
+ * device the event originated from, use clutter_event_get_source_device()
  *
  * Key event
  *
- * Since: 0.2
+ *
  */
 struct _ClutterKeyEvent
 {
@@ -181,7 +182,8 @@ struct _ClutterKeyEvent
  * @click_count: number of button presses within the default time
  *   and radius
  * @axes: reserved for future use
- * @device: reserved for future use
+ * @device: the device that originated the event. If you want the physical
+ * device the event originated from, use clutter_event_get_source_device()
  *
  * Button event.
  *
@@ -189,7 +191,7 @@ struct _ClutterKeyEvent
  * event, and can be transformed into actor-relative coordinates by
  * using clutter_actor_transform_stage_point().
  *
- * Since: 0.2
+ *
  */
 struct _ClutterButtonEvent
 {
@@ -218,11 +220,12 @@ struct _ClutterButtonEvent
  * @x: event X coordinate
  * @y: event Y coordinate
  * @related: actor related to the crossing
- * @device: reserved for future use
+ * @device: the device that originated the event. If you want the physical
+ * device the event originated from, use clutter_event_get_source_device()
  *
  * Event for the movement of the pointer across different actors
  *
- * Since: 0.2
+ *
  */
 struct _ClutterCrossingEvent
 {
@@ -249,11 +252,12 @@ struct _ClutterCrossingEvent
  * @y: event Y coordinate
  * @modifier_state: button modifiers
  * @axes: reserved for future use
- * @device: reserved for future use
+ * @device: the device that originated the event. If you want the physical
+ * device the event originated from, use clutter_event_get_source_device()
  *
  * Event for the pointer motion
  *
- * Since: 0.2
+ *
  */
 struct _ClutterMotionEvent
 {
@@ -282,11 +286,12 @@ struct _ClutterMotionEvent
  * @direction: direction of the scrolling
  * @modifier_state: button modifiers
  * @axes: reserved for future use
- * @device: reserved for future use
+ * @device: the device that originated the event. If you want the physical
+ * device the event originated from, use clutter_event_get_source_device()
  *
  * Scroll wheel (or similar device) event
  *
- * Since: 0.2
+ *
  */
 struct _ClutterScrollEvent
 {
@@ -316,7 +321,7 @@ struct _ClutterScrollEvent
  *
  * Event signalling a change in the #ClutterStage state.
  *
- * Since: 0.2
+ *
  */
 struct _ClutterStageStateEvent
 {
@@ -344,7 +349,8 @@ struct _ClutterStageStateEvent
  *   of modifier keys (e.g. Control, Shift, and Alt) and the pointer
  *   buttons. See #ClutterModifierType
  * @axes: reserved 
- * @device: the device that originated the event
+ * @device: the device that originated the event. If you want the physical
+ * device the event originated from, use clutter_event_get_source_device()
  *
  * Used for touch events.
  *
@@ -359,7 +365,7 @@ struct _ClutterStageStateEvent
  * With multi-touch capable devices there can be multiple event sequence
  * running at the same time.
  *
- * Since: 1.10
+ *
  */
 struct _ClutterTouchEvent
 {
@@ -382,7 +388,7 @@ struct _ClutterTouchEvent
  *
  * Generic event wrapper.
  *
- * Since: 0.2
+ *
  */
 union _ClutterEvent
 {
@@ -443,24 +449,24 @@ void                    clutter_event_set_coords                (ClutterEvent   
 void                    clutter_event_get_coords                (const ClutterEvent     *event,
                                                                  gfloat                 *x,
                                                                  gfloat                 *y);
-CLUTTER_AVAILABLE_IN_1_12
+
 void                    clutter_event_get_position              (const ClutterEvent     *event,
                                                                  ClutterPoint           *position);
-CLUTTER_AVAILABLE_IN_1_12
+
 float                   clutter_event_get_distance              (const ClutterEvent     *source,
                                                                  const ClutterEvent     *target);
-CLUTTER_AVAILABLE_IN_1_12
+
 double                  clutter_event_get_angle                 (const ClutterEvent     *source,
                                                                  const ClutterEvent     *target);
 
 gdouble *               clutter_event_get_axes                  (const ClutterEvent     *event,
                                                                  guint                  *n_axes);
 
-CLUTTER_AVAILABLE_IN_1_12
+
 gboolean                clutter_event_has_shift_modifier        (const ClutterEvent     *event);
-CLUTTER_AVAILABLE_IN_1_12
+
 gboolean                clutter_event_has_control_modifier      (const ClutterEvent     *event);
-CLUTTER_AVAILABLE_IN_1_12
+
 gboolean                clutter_event_is_pointer_emulated       (const ClutterEvent     *event);
 
 void                    clutter_event_set_key_symbol            (ClutterEvent           *event,
@@ -470,8 +476,8 @@ void                    clutter_event_set_key_code              (ClutterEvent   
                                                                  guint16                 key_code);
 guint16                 clutter_event_get_key_code              (const ClutterEvent     *event);
 void                    clutter_event_set_key_unicode           (ClutterEvent           *event,
-                                                                 guint32                 key_unicode);
-guint32                 clutter_event_get_key_unicode           (const ClutterEvent     *event);
+                                                                 gunichar                key_unicode);
+gunichar                clutter_event_get_key_unicode           (const ClutterEvent     *event);
 
 void                    clutter_event_set_button                (ClutterEvent           *event,
                                                                  guint32                 button);
@@ -485,20 +491,20 @@ ClutterActor *          clutter_event_get_related               (const ClutterEv
 void                    clutter_event_set_scroll_direction      (ClutterEvent           *event,
                                                                  ClutterScrollDirection  direction);
 ClutterScrollDirection  clutter_event_get_scroll_direction      (const ClutterEvent     *event);
-CLUTTER_AVAILABLE_IN_1_10
+
 void                    clutter_event_set_scroll_delta          (ClutterEvent           *event,
                                                                  gdouble                 dx,
                                                                  gdouble                 dy);
-CLUTTER_AVAILABLE_IN_1_10
+
 void                    clutter_event_get_scroll_delta          (const ClutterEvent     *event,
                                                                  gdouble                *dx,
                                                                  gdouble                *dy);
 
-CLUTTER_AVAILABLE_IN_1_10
+
 ClutterEventSequence *  clutter_event_get_event_sequence        (const ClutterEvent     *event);
 
 guint32                 clutter_keysym_to_unicode               (guint                   keyval);
-CLUTTER_AVAILABLE_IN_1_10
+
 guint                   clutter_unicode_to_keysym               (guint32                 wc);
 
 guint32                 clutter_get_current_event_time          (void);

@@ -122,21 +122,56 @@ _clutter_stage_window_get_geometry (ClutterStageWindow    *window,
   CLUTTER_STAGE_WINDOW_GET_IFACE (window)->get_geometry (window, geometry);
 }
 
-int
-_clutter_stage_window_get_pending_swaps (ClutterStageWindow *window)
+void
+_clutter_stage_window_schedule_update  (ClutterStageWindow *window,
+                                        int                 sync_delay)
+{
+  ClutterStageWindowIface *iface;
+
+  g_return_if_fail (CLUTTER_IS_STAGE_WINDOW (window));
+
+  iface = CLUTTER_STAGE_WINDOW_GET_IFACE (window);
+  if (iface->schedule_update == NULL)
+    {
+      g_assert (!clutter_feature_available (CLUTTER_FEATURE_SWAP_EVENTS));
+      return;
+    }
+
+  iface->schedule_update (window, sync_delay);
+}
+
+gint64
+_clutter_stage_window_get_update_time (ClutterStageWindow *window)
 {
   ClutterStageWindowIface *iface;
 
   g_return_val_if_fail (CLUTTER_IS_STAGE_WINDOW (window), 0);
 
   iface = CLUTTER_STAGE_WINDOW_GET_IFACE (window);
-  if (iface->get_pending_swaps == NULL)
+  if (iface->get_update_time == NULL)
     {
       g_assert (!clutter_feature_available (CLUTTER_FEATURE_SWAP_EVENTS));
       return 0;
     }
 
-  return iface->get_pending_swaps (window);
+  return iface->get_update_time (window);
+}
+
+void
+_clutter_stage_window_clear_update_time (ClutterStageWindow *window)
+{
+  ClutterStageWindowIface *iface;
+
+  g_return_if_fail (CLUTTER_IS_STAGE_WINDOW (window));
+
+  iface = CLUTTER_STAGE_WINDOW_GET_IFACE (window);
+  if (iface->clear_update_time == NULL)
+    {
+      g_assert (!clutter_feature_available (CLUTTER_FEATURE_SWAP_EVENTS));
+      return;
+    }
+
+  iface->clear_update_time (window);
 }
 
 void
@@ -234,6 +269,35 @@ _clutter_stage_window_redraw (ClutterStageWindow *window)
   iface = CLUTTER_STAGE_WINDOW_GET_IFACE (window);
   if (iface->redraw)
     iface->redraw (window);
+}
+
+
+void
+_clutter_stage_window_get_dirty_pixel (ClutterStageWindow *window,
+                                       int *x, int *y)
+{
+  ClutterStageWindowIface *iface;
+
+  *x = 0;
+  *y = 0;
+
+  g_return_if_fail (CLUTTER_IS_STAGE_WINDOW (window));
+
+  iface = CLUTTER_STAGE_WINDOW_GET_IFACE (window);
+  if (iface->get_dirty_pixel)
+    iface->get_dirty_pixel (window, x, y);
+}
+
+void
+_clutter_stage_window_dirty_back_buffer (ClutterStageWindow *window)
+{
+  ClutterStageWindowIface *iface;
+
+  g_return_if_fail (CLUTTER_IS_STAGE_WINDOW (window));
+
+  iface = CLUTTER_STAGE_WINDOW_GET_IFACE (window);
+  if (iface->dirty_back_buffer)
+    iface->dirty_back_buffer (window);
 }
 
 /* NB: The presumption shouldn't be that a stage can't be comprised of

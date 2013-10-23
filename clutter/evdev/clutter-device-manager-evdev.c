@@ -111,6 +111,7 @@ struct _ClutterEventSource
   GPollFD event_poll_fd;              /* file descriptor of the /dev node */
   struct xkb_state *xkb;              /* XKB state object */
   gint x, y;                          /* last x, y position for pointers */
+  guint32 modifier_state;             /* key modifiers */
 };
 
 static gboolean
@@ -289,7 +290,7 @@ notify_button (ClutterEventSource *source,
   else
     event = clutter_event_new (CLUTTER_BUTTON_RELEASE);
 
-  /* Update the modfiers */
+  /* Update the modifiers */
   if (state)
     source->modifier_state |= maskmap[button - BTN_LEFT];
   else
@@ -493,10 +494,10 @@ clutter_event_source_new (ClutterInputDeviceEvdev *input_device)
   if (type == CLUTTER_KEYBOARD_DEVICE)
     {
       /* create the xkb description */
-      event_source->xkb = _clutter_xkb_desc_new (NULL,
-                                                 option_xkb_layout,
-                                                 option_xkb_variant,
-                                                 option_xkb_options);
+      event_source->xkb = _clutter_xkb_state_new (NULL,
+                                                  option_xkb_layout,
+                                                  option_xkb_variant,
+                                                  option_xkb_options);
       if (G_UNLIKELY (event_source->xkb == NULL))
         {
           g_warning ("Could not compile keymap %s:%s:%s", option_xkb_layout,
@@ -1038,7 +1039,7 @@ _clutter_events_evdev_uninit (ClutterBackend *backend)
  *
  * This function should only be called after clutter has been initialized.
  *
- * Since: 1.10
+ *
  * Stability: unstable
  */
 void
@@ -1093,7 +1094,7 @@ clutter_evdev_release_devices (void)
  *
  * This function should only be called after clutter has been initialized.
  *
- * Since: 1.10
+ *
  * Stability: unstable
  */
 void

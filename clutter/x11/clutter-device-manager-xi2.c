@@ -36,6 +36,7 @@
 #include "clutter-device-manager-private.h"
 #include "clutter-event-private.h"
 #include "clutter-event-translator.h"
+#include "clutter-keysyms.h"
 #include "clutter-stage-private.h"
 #include "clutter-private.h"
 
@@ -94,13 +95,13 @@ translate_valuator_class (Display             *xdisplay,
       atoms_initialized = TRUE;
     }
 
-  for (i = CLUTTER_INPUT_AXIS_IGNORE;
-       i < CLUTTER_INPUT_AXIS_LAST;
+  for (i = 0;
+       i < N_AXIS_ATOMS;
        i += 1)
     {
       if (clutter_input_axis_atoms[i] == class->label)
         {
-          axis = i;
+          axis = i + 1;
           break;
         }
     }
@@ -733,15 +734,19 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
 
         device = g_hash_table_lookup (manager_xi2->devices_by_id,
                                       GINT_TO_POINTER (xev->deviceid));
+        source_device = g_hash_table_lookup (manager_xi2->devices_by_id,
+                                             GINT_TO_POINTER (xev->sourceid));
         if (device)
           {
             _clutter_input_device_reset_axes (device);
-            _clutter_input_device_reset_scroll_info (device);
             translate_device_classes (backend_x11->xdpy,
                                       device,
                                       xev->classes,
                                       xev->num_classes);
           }
+
+        if (source_device)
+          _clutter_input_device_reset_scroll_info (source_device);
       }
       retval = CLUTTER_TRANSLATE_REMOVE;
       break;
@@ -761,14 +766,14 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
         event->key.time = xev->time;
         event->key.stage = stage;
         event->key.modifier_state =
-          _clutter_input_device_xi2_translate_state (&xev->mods, &xev->buttons);
+          _clutter_input_device_xi2_translate_state (&xev->mods, &xev->buttons, &xev->group);
         event->key.hardware_keycode = xev->detail;
 
           /* keyval is the key ignoring all modifiers ('1' vs. '!') */
         event->key.keyval =
           _clutter_keymap_x11_translate_key_state (backend_x11->keymap,
                                                    event->key.hardware_keycode,
-                                                   event->key.modifier_state,
+                                                   &event->key.modifier_state,
                                                    NULL);
 
         /* KeyEvents have platform specific data associated to them */
@@ -871,7 +876,8 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
             event->scroll.y = xev->event_y;
             event->scroll.modifier_state =
               _clutter_input_device_xi2_translate_state (&xev->mods,
-                                                         &xev->buttons);
+                                                         &xev->buttons,
+                                                         &xev->group);
 
             clutter_event_set_source_device (event, source_device);
             clutter_event_set_device (event, device);
@@ -919,7 +925,8 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
             event->button.button = xev->detail;
             event->button.modifier_state =
               _clutter_input_device_xi2_translate_state (&xev->mods,
-                                                         &xev->buttons);
+                                                         &xev->buttons,
+                                                         &xev->group);
 
             clutter_event_set_source_device (event, source_device);
             clutter_event_set_device (event, device);
@@ -1000,7 +1007,8 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
             event->scroll.y = xev->event_y;
             event->scroll.modifier_state =
               _clutter_input_device_xi2_translate_state (&xev->mods,
-                                                         &xev->buttons);
+                                                         &xev->buttons,
+                                                         &xev->group);
 
             clutter_event_set_scroll_delta (event, delta_x, delta_y);
             clutter_event_set_source_device (event, source_device);
@@ -1028,7 +1036,8 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
         event->motion.y = xev->event_y;
         event->motion.modifier_state =
           _clutter_input_device_xi2_translate_state (&xev->mods,
-                                                     &xev->buttons);
+                                                     &xev->buttons,
+                                                     &xev->group);
 
         clutter_event_set_source_device (event, source_device);
         clutter_event_set_device (event, device);
@@ -1079,7 +1088,8 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
         event->touch.y = xev->event_y;
         event->touch.modifier_state =
           _clutter_input_device_xi2_translate_state (&xev->mods,
-                                                     &xev->buttons);
+                                                     &xev->buttons,
+                                                     &xev->group);
 
         clutter_event_set_source_device (event, source_device);
 
@@ -1147,7 +1157,8 @@ clutter_device_manager_xi2_translate_event (ClutterEventTranslator *translator,
 
         event->touch.modifier_state =
           _clutter_input_device_xi2_translate_state (&xev->mods,
-                                                     &xev->buttons);
+                                                     &xev->buttons,
+                                                     &xev->group);
         event->touch.modifier_state |= CLUTTER_BUTTON1_MASK;
 
         if (xev->flags & XITouchEmulatingPointer)
@@ -1341,8 +1352,8 @@ relate_slaves (gpointer key,
   ClutterDeviceManagerXI2 *manager_xi2 = data;
   ClutterInputDevice *master, *slave;
 
-  master = g_hash_table_lookup (manager_xi2->devices_by_id, key);
-  slave = g_hash_table_lookup (manager_xi2->devices_by_id, value);
+  slave = g_hash_table_lookup (manager_xi2->devices_by_id, key);
+  master = g_hash_table_lookup (manager_xi2->devices_by_id, value);
 
   _clutter_input_device_set_associated_device (slave, master);
   _clutter_input_device_add_slave (master, slave);
